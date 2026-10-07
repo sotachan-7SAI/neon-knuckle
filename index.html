@@ -187,6 +187,10 @@ canvas#view{position:fixed;inset:0;width:100%;height:100%;display:block}
 .ebtns button.go{flex:1 1 250px;max-width:340px;margin:0;padding:18px 14px;font-size:clamp(17px,2.2vw,22px)}
 .ebtns small{display:block;margin-top:8px;font:500 12px/1.3 var(--jp);letter-spacing:.02em;opacity:.85}
 /* ---- スマホ: 画面のスティックとボタン ---- */
+html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body.touch.inplay,body.touch.inplay *{touch-action:none !important}
+#tZoom{position:fixed;left:50%;top:44px;transform:translateX(-50%);z-index:31;display:none;padding:8px 14px;border-radius:10px;background:rgba(200,16,46,.92);color:#fff;font:700 13px/1.4 var(--jp);text-align:center;pointer-events:none;white-space:nowrap}
+#tZoom.on{display:block}
 canvas#view{touch-action:none}
 body.touch{-webkit-touch-callout:none;-webkit-user-select:none;--sr:env(safe-area-inset-right,0px);--sl:env(safe-area-inset-left,0px);--sb:env(safe-area-inset-bottom,0px)}
 body.touch #hint{display:none}

@@ -4376,6 +4376,28 @@ function touchSetup() {
   addEventListener('contextmenu', (e) => e.preventDefault());
   // 画面のどこでもタップ: ゲームオーバー → コンティニュー / 集計の数字が回っている間 → 先へ
   addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; if (G.phase === 'over') continueGame(); else if (G.phase === 'tally' && G.tally && !G.tally.done) tallyKey(); }, true);
+  // ブラウザそのものの拡大（2 本指でつまむ・すばやく 2 回タップ）を止める。iPhone は、ページ側の「拡大しない」指定だけでは止まらない
+  const stop = (e) => e.preventDefault();
+  for (const n of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(n, stop, { passive: false });
+  document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });   // スティックとボタンを同時に押すと「つまむ」と見なされるのを防ぐ
+  let lastEnd = 0;
+  document.addEventListener('touchend', (e) => { const now = performance.now(); if (G.phase !== 'title' && now - lastEnd < 400) e.preventDefault(); lastEnd = now; }, { passive: false });
+  document.addEventListener('dblclick', stop, { passive: false });
+  // それでも拡大されてしまったら、元の大きさへ戻す（戻らなければ、戻し方を出す）
+  const vv = window.visualViewport, meta = document.querySelector('meta[name=viewport]');
+  const zm = document.createElement('div'); zm.id = 'tZoom'; zm.textContent = '画面が拡大されています。2 本指でつまんで戻すか、読みこみ直してください'; document.body.appendChild(zm);
+  if (vv) {
+    let rt = 0;
+    const chk = () => {
+      const big = vv.scale > 1.03; if (!big) { zm.classList.remove('on'); return; }
+      clearTimeout(rt);
+      rt = setTimeout(() => {
+        if (meta) { const base = meta.getAttribute('content'); meta.setAttribute('content', 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'); setTimeout(() => meta.setAttribute('content', base), 80); }
+        setTimeout(() => zm.classList.toggle('on', vv.scale > 1.03), 500);
+      }, 150);
+    };
+    vv.addEventListener('resize', chk); vv.addEventListener('scroll', chk);
+  }
   const sk = $('finSkip'); if (sk) sk.addEventListener('pointerdown', (e) => { e.preventDefault(); finaleSkip(); });
   log('touch controls on');
 }
@@ -4383,7 +4405,7 @@ const finSkipText = () => TP.on ? 'ここを 2 回タップでスキップ' : 'E
 function touchFrame() {
   if (!TP.on) return;
   const show = G.phase === 'play' && !G.finale;
-  if (show !== TP.shown) { TP.shown = show; TP.el.classList.toggle('on', show); if (!show) { TP.p.clear(); TP.h.clear(); } }
+  if (show !== TP.shown) { TP.shown = show; TP.el.classList.toggle('on', show); document.body.classList.toggle('inplay', show); if (!show) { TP.p.clear(); TP.h.clear(); } }
   const port = innerHeight > innerWidth * 1.05;
   if (port !== TP.port) { TP.port = port; TP.rot.classList.toggle('on', port); }
 }
