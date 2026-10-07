@@ -4304,6 +4304,59 @@ addEventListener('keydown', (e) => {
 addEventListener('keyup', (e) => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
 let padPrev = [];
+// =========================================================================================
+// スマホ・タブレット: 画面のスティックとボタン（指で触ったときだけ出る。キーボードやパッドの操作はそのまま）
+//   左側 = さわった所がスティックになる（すばやく 2 回たおすと走る）/ 右側 = 攻撃・跳ぶ・必殺・波動・よけ・ガード・連携・超必殺
+// =========================================================================================
+const TP = { on: false, mx: 0, mz: 0, run: 0, p: new Set(), h: new Set(), el: null, rot: null };
+const TP_BTNS = [['atk', '攻撃'], ['jump', '跳ぶ'], ['sp', '必殺'], ['rng', '波動'], ['dodge', 'よけ'], ['guard', 'ガード'], ['duo', '連携'], ['sup', '超必殺']];
+function touchSetup() {
+  if (TP.on) return; TP.on = true;
+  document.body.classList.add('touch'); if (!Q.get('bloom')) bloomOn = false;   // スマホは光のにじみを切って軽くする
+  const root = document.createElement('div'); root.id = 'touch';
+  root.innerHTML = '<div id="tZone"></div><div id="tStick"><i></i></div>' + TP_BTNS.map(([k, t]) => `<button class="tb" data-k="${k}">${t}</button>`).join('') + '<button id="tPause">Ⅱ</button>';
+  document.body.appendChild(root); TP.el = root;
+  const rot = document.createElement('div'); rot.id = 'tRotate'; rot.innerHTML = '<div><b>⟳</b>スマホを横向きにしてください</div>'; document.body.appendChild(rot); TP.rot = rot;
+  // スティック: 左側のどこをさわっても、そこが中心になる
+  const zone = root.querySelector('#tZone'), st = root.querySelector('#tStick'), knob = st.firstChild, R = 50;
+  let sid = null, ox = 0, oy = 0, lastDir = 0, lastT = 0, curDir = 0;
+  const mv = (e) => {
+    let dx = e.clientX - ox, dy = e.clientY - oy; const d = Math.hypot(dx, dy); if (d > R) { dx *= R / d; dy *= R / d; }
+    knob.style.transform = `translate(${dx}px,${dy}px)`;
+    const nx = dx / R, ny = dy / R, dir = Math.abs(nx) > .34 ? Math.sign(nx) : 0;
+    if (dir !== curDir) {   // 同じ向きへ、すばやく 2 回たおす = 走る
+      if (dir) { const now = performance.now(); TP.run = (dir === lastDir && now - lastT < 380) ? dir : 0; lastDir = dir; lastT = now; } else TP.run = 0;
+      curDir = dir;
+    }
+    TP.mx = dir; TP.mz = Math.abs(ny) > .4 ? Math.sign(ny) : 0;
+  };
+  const end = (e) => { if (e.pointerId !== sid) return; sid = null; TP.mx = TP.mz = 0; TP.run = 0; curDir = 0; st.classList.remove('on'); st.style.left = st.style.top = ''; knob.style.transform = ''; };
+  zone.addEventListener('pointerdown', (e) => { if (sid != null) return; sid = e.pointerId; ox = e.clientX; oy = e.clientY; st.style.left = ox + 'px'; st.style.top = oy + 'px'; st.classList.add('on'); try { zone.setPointerCapture(sid); } catch (er) {} mv(e); e.preventDefault(); ac(); });
+  zone.addEventListener('pointermove', (e) => { if (e.pointerId === sid) { mv(e); e.preventDefault(); } });
+  zone.addEventListener('pointerup', end); zone.addEventListener('pointercancel', end);
+  // ボタン: 押した瞬間 = 1 回ぶん / 押している間 = ガードや波動の溜め
+  root.querySelectorAll('.tb').forEach((b) => {
+    const k = b.dataset.k, up = () => { TP.h.delete(k); b.classList.remove('on'); };
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); TP.p.add(k); TP.h.add(k); b.classList.add('on'); ac(); try { b.setPointerCapture(e.pointerId); } catch (er) {} });
+    b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+  });
+  root.querySelector('#tPause').addEventListener('pointerdown', (e) => { e.preventDefault(); togglePause(); });
+  addEventListener('contextmenu', (e) => e.preventDefault());
+  // 画面のどこでもタップ: ゲームオーバー → コンティニュー / 集計の数字が回っている間 → 先へ
+  addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; if (G.phase === 'over') continueGame(); else if (G.phase === 'tally' && G.tally && !G.tally.done) tallyKey(); }, true);
+  const sk = $('finSkip'); if (sk) sk.addEventListener('pointerdown', (e) => { e.preventDefault(); finaleSkip(); });
+  log('touch controls on');
+}
+const finSkipText = () => TP.on ? 'ここを 2 回タップでスキップ' : 'Enter を 2 回でスキップ';
+function touchFrame() {
+  if (!TP.on) return;
+  const show = G.phase === 'play' && !G.finale;
+  if (show !== TP.shown) { TP.shown = show; TP.el.classList.toggle('on', show); if (!show) { TP.p.clear(); TP.h.clear(); } }
+  const port = innerHeight > innerWidth * 1.05;
+  if (port !== TP.port) { TP.port = port; TP.rot.classList.toggle('on', port); }
+}
+if (Q.get('touch') === '1' || (window.matchMedia && matchMedia('(pointer: coarse)').matches && Q.get('touch') !== '0')) touchSetup();
+else addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') touchSetup(); }, true);
 function readP1() {
   const k = (...c) => c.some(x => keys.has(x)), p = (...c) => c.some(x => pressed.has(x));
   let mx = (k('ArrowRight', 'KeyD') ? 1 : 0) - (k('ArrowLeft', 'KeyA') ? 1 : 0);
@@ -4324,6 +4377,12 @@ function readP1() {
     if (bp(9) && (G.phase === 'play' || G.phase === 'paused')) togglePause();
     if (bp(9) && G.phase === 'title') startGame();
     padPrev = pad.buttons.map(x => x.pressed);
+  }
+  if (TP.on) {   // 画面のスティックとボタン
+    if (TP.mx) mx = TP.mx; if (TP.mz) mz = TP.mz; const tp = (k) => TP.p.has(k), th = (k) => TP.h.has(k);
+    atk ||= tp('atk'); jump ||= tp('jump'); sp ||= tp('sp'); rng ||= tp('rng'); rngHold ||= th('rng'); dodge ||= tp('dodge'); guard ||= th('guard'); duo ||= tp('duo'); sup ||= tp('sup');
+    if (TP.run && TP.run === mx) { run = true; runBtn = true; }
+    TP.p.clear();
   }
   if (XR.on) {   // VR のコントローラー: 左スティック移動（押し込みながらで走る）/ 右トリガー攻撃 / 左トリガー気弾 / A・X ジャンプ / B・Y 必殺 / 左グリップ ガード / 右グリップ よける
     if (Math.abs(XR.mx) > .3) mx = Math.sign(XR.mx); if (Math.abs(XR.mz) > .3) mz = Math.sign(XR.mz);
@@ -5988,7 +6047,7 @@ function finaleStart() {
   scene.add(F.g);
   for (const h of hs) { if (h.victim) releaseGrab(h); h.fin = { ent: null, yaw: null }; h.move = null; h.vx = h.vy = h.vz = 0; h.y = 0; h.inv = 0; h.flat = 0; h.pit = null; h.state = 'idle'; h.t = 0; }
   if (xrOn() && vrView === 'back') { F.vrBack = true; setVrView('top', true); }   // VR の背中カメラだと舞台が見えないので、終わるまで客席（俯瞰）から
-  $('finSkip').textContent = 'Enter を 2 回でスキップ'; $('finSkip').classList.add('on'); $('hud').classList.add('fin');
+  $('finSkip').textContent = finSkipText(); $('finSkip').classList.add('on'); $('hud').classList.add('fin');
   F.ev = finScript(F).sort((a, b) => a[0] - b[0]);
   log('finale start kills=' + (G.runKills || 0) + ' deaths=' + (G.runDeaths || 0) + ' cast=' + finCastPlan(F).length);
 }
@@ -6000,7 +6059,7 @@ function finaleSkip() {
 function finaleTick(dt) {
   const F = G.finale; if (!F) return;
   F.t += dt; G.time = F.time0;
-  if (F.skipT > 0) { F.skipT -= dt; if (F.skipT <= 0) $('finSkip').textContent = 'Enter を 2 回でスキップ'; }
+  if (F.skipT > 0) { F.skipT -= dt; if (F.skipT <= 0) $('finSkip').textContent = finSkipText(); }
   while (F.i < F.ev.length && F.ev[F.i][0] <= F.t) { F.ev[F.i++][1](); if (G.finale !== F) return; }
   G.camX += (F.camX - G.camX) * Math.min(1, dt * 2.4);
   // 主人公（走る・止まる・踊る）
@@ -6367,7 +6426,7 @@ function stageClear() {
 }
 function gameOver() {
   G.phase = 'over';
-  banner('GAME OVER', 'Enter でコンティニュー'); sfx.over();
+  banner('GAME OVER', TP.on ? '画面をタップでコンティニュー' : 'Enter でコンティニュー'); sfx.over();
   say('over', 3);
 }
 function continueGame() {
@@ -6559,6 +6618,7 @@ function frame() {
     else { camera.position.set(cx + sx, CAM_Y + sy, CAM_Z); camera.lookAt(cx + sx * .5, LOOK_Y, 0); }
     if (camHook) camHook(camera);
   }
+  touchFrame();
   if (running || G.phase === 'paused') updateHUD(dt);
   if (!xrOn() && composer && bloomOn) composer.render(); else renderer.render(scene, camera);
 }
@@ -6817,12 +6877,23 @@ if (WEB) {
   document.body.classList.add('web');
   const inp = $('vrmFile'), note = (m, bad) => { const el = $('vrmNote'); el.textContent = m; el.style.color = bad ? '#ff8aa6' : ''; };
   let who = 1;
+  // 最初の質問: スマホか、パソコンか → パソコンなら、そのままのキャラか、自分の VRM か → タイトルへ
+  const en = $('entry'), entryOpen = () => !en.classList.contains('hide');
+  const entryDone = () => { en.classList.add('hide'); if (G.phase === 'title') $('title').classList.remove('hide'); };
+  if (!Q.get('autostart') && Q.get('entry') !== '0') {
+    en.classList.remove('hide'); $('title').classList.add('hide');
+    $('eSp').onclick = () => { ac(); sfx.ui(); touchSetup(); entryDone(); };
+    $('ePc').onclick = () => { ac(); sfx.ui(); $('entry1').classList.add('hide'); $('entry2').classList.remove('hide'); };
+    $('eDef').onclick = () => { ac(); sfx.ui(); entryDone(); };
+    $('eVrm').onclick = () => { ac(); who = 1; inp.value = ''; inp.click(); };
+  }
   const add = (file, w) => {
     if (!file) return;
-    if (!/\.vrm$/i.test(file.name)) { note('VRM ファイル（.vrm）を選んでください', true); return; }
+    if (!/\.vrm$/i.test(file.name)) { note('VRM ファイル（.vrm）を選んでください', true); $('eNote').textContent = 'VRM ファイル（.vrm）を選んでください'; return; }
     if (G.phase !== 'title') return;
     const c = { name: file.name.replace(/\.vrm$/i, '').slice(0, 14) || 'MY VRM', vrm: URL.createObjectURL(file), personality: 'genki', own: true };
     CHARS.push(c); if (w === 2) G.claudeChar = c; else G.p1Char = c;
+    if (entryOpen()) entryDone();
     buildPickers(); note('「' + c.name + '」を' + (w === 2 ? '相棒' : 'あなた') + 'にしました（ファイルは、このブラウザの中だけで使います）'); try { ac(); sfx.ui(); } catch (e) {}
   };
   $('vrmBtn').onclick = () => { who = 1; inp.value = ''; inp.click(); };
@@ -6866,6 +6937,6 @@ async function vrSetup(now) {
 addEventListener('focus', () => { if (!VRB.ok) vrSetup(); }); document.addEventListener('visibilitychange', () => { if (!VRB.ok && document.visibilityState === 'visible') vrSetup(); });
 navigator.xr?.addEventListener?.('devicechange', () => vrSetup());
 vrSetup();
-window.__brawl = { CLIPS, PROFILES, STYLES, DUOS, SUPER_PRE, loadProfile, loadClip, loadDuoClips, loadMotionCfg, motionCfg: () => MOTION_CFG, SMP, T, weaponSync, finaleStart, finaleTick, finaleEnd, finaleSkip, finaleDebug, fin: () => G.finale, voidFx: () => voidFx, VR_PAD, drawVrHelp, vrHelpCv, XR, xrTest: (sources, dt = 1 / 60) => { const o = renderer.xr.getSession; renderer.xr.getSession = () => ({ inputSources: sources }); try { pollXR(dt); } finally { renderer.xr.getSession = o; } return JSON.parse(JSON.stringify({ ...XR, prev: undefined, view: vrView })); }, spin: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) { gameTime += dt; if (hitStop > 0) hitStop -= dt; else if (G.phase === 'play' || G.phase === 'ending' || G.phase === 'tally') sim(dt); if (G.finale) finaleTick(dt); for (const f of fighters) { if (f.body && !f.out) vfxFighter(f, dt, false); } for (const fn of stageAnim) fn(dt); gimFrame(dt); updateFx(dt); } }, fxStep: (dt) => { for (const f of fighters) vfxFighter(f, dt, false); updateFx(dt); }, flow, curlNoise, hermite, noiseGrad, rig, vrHud, vrBackRig, setVrView, vrView: () => vrView, DUOS, startDuo, tryDuo, trySuper, addMeter, cine: () => G.cine, hs: (v) => { if (v != null) hitStop = v; return hitStop; }, gims: () => gims, holes: () => holes, vends: () => vends, doors: () => stageDoors, items: () => items, spawnItem, COPY, takeCapsule, pressGag, envHit, gag: () => gag, hazards: () => hazards, spawnBolts, blinkAway, WEAPONS, spawnWeapon, holdWeapon, pickWeapon, gweapons: () => gweapons, STAGES, ENEMIES, enterStage, stageClear, tallyKey, buildStage, theme: () => stageTheme, flushFx: () => { for (const e of fx) scene.remove(e.o); fx = []; }, sfx, fx: { glow, smoke, streaks, trails, fxHit, fxKO, fxExplode, fxSpecial, fxClear, numFx }, comboHit, CLIPS, PROFILES, shots: () => shots, startMove, startDodge, applyHit, aiEnemy, nearestHero, getEngaged: () => engaged, halfW: () => halfW, G, fighters: () => fighters, startGame, spawnEnemy, keys, pressed, MOVES, camera, setCam: (fn) => { camHook = fn; }, setInput: (fn) => { inputOverride = fn; }, step: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) { if (G.phase !== 'play' && G.phase !== 'ending' && G.phase !== 'tally') break; if (hitStop > 0) { hitStop -= dt; continue; } sim(dt); if (G.finale) finaleTick(dt); } } };
+window.__brawl = { TP, touchSetup, CLIPS, PROFILES, STYLES, DUOS, SUPER_PRE, loadProfile, loadClip, loadDuoClips, loadMotionCfg, motionCfg: () => MOTION_CFG, SMP, T, weaponSync, finaleStart, finaleTick, finaleEnd, finaleSkip, finaleDebug, fin: () => G.finale, voidFx: () => voidFx, VR_PAD, drawVrHelp, vrHelpCv, XR, xrTest: (sources, dt = 1 / 60) => { const o = renderer.xr.getSession; renderer.xr.getSession = () => ({ inputSources: sources }); try { pollXR(dt); } finally { renderer.xr.getSession = o; } return JSON.parse(JSON.stringify({ ...XR, prev: undefined, view: vrView })); }, spin: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) { gameTime += dt; if (hitStop > 0) hitStop -= dt; else if (G.phase === 'play' || G.phase === 'ending' || G.phase === 'tally') sim(dt); if (G.finale) finaleTick(dt); for (const f of fighters) { if (f.body && !f.out) vfxFighter(f, dt, false); } for (const fn of stageAnim) fn(dt); gimFrame(dt); updateFx(dt); } }, fxStep: (dt) => { for (const f of fighters) vfxFighter(f, dt, false); updateFx(dt); }, flow, curlNoise, hermite, noiseGrad, rig, vrHud, vrBackRig, setVrView, vrView: () => vrView, DUOS, startDuo, tryDuo, trySuper, addMeter, cine: () => G.cine, hs: (v) => { if (v != null) hitStop = v; return hitStop; }, gims: () => gims, holes: () => holes, vends: () => vends, doors: () => stageDoors, items: () => items, spawnItem, COPY, takeCapsule, pressGag, envHit, gag: () => gag, hazards: () => hazards, spawnBolts, blinkAway, WEAPONS, spawnWeapon, holdWeapon, pickWeapon, gweapons: () => gweapons, STAGES, ENEMIES, enterStage, stageClear, tallyKey, buildStage, theme: () => stageTheme, flushFx: () => { for (const e of fx) scene.remove(e.o); fx = []; }, sfx, fx: { glow, smoke, streaks, trails, fxHit, fxKO, fxExplode, fxSpecial, fxClear, numFx }, comboHit, CLIPS, PROFILES, shots: () => shots, startMove, startDodge, applyHit, aiEnemy, nearestHero, getEngaged: () => engaged, halfW: () => halfW, G, fighters: () => fighters, startGame, spawnEnemy, keys, pressed, MOVES, camera, setCam: (fn) => { camHook = fn; }, setInput: (fn) => { inputOverride = fn; }, step: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) { if (G.phase !== 'play' && G.phase !== 'ending' && G.phase !== 'tally') break; if (hitStop > 0) { hitStop -= dt; continue; } sim(dt); if (G.finale) finaleTick(dt); } } };
 renderer.setAnimationLoop(frame);
 log('ready');

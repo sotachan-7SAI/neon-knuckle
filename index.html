@@ -1,7 +1,10 @@
 <!DOCTYPE html>
 <meta charset="utf-8">
 <title>NEON KNUCKLE ネオンナックル ― 5億年商店街の乱</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#070a14">
 <meta name="description" content="VRM のキャラと 2 人で 5億年を殴り進む、ブラウザで遊べるベルトスクロールアクション。自分の VRM でも遊べます。">
 <meta property="og:title" content="NEON KNUCKLE ネオンナックル ― 5億年商店街の乱">
 <meta property="og:description" content="VRM のキャラと 2 人で 5億年を殴り進む、ブラウザで遊べるベルトスクロールアクション。全 5 面。自分の VRM でも遊べます。">
@@ -174,6 +177,41 @@ canvas#view{position:fixed;inset:0;width:100%;height:100%;display:block}
   text-shadow:0 0 14px var(--spark),0 0 40px var(--spark),.07em .07em 0 #000;white-space:nowrap}
 #stamp.show{animation:stamp 2.1s cubic-bezier(.2,1.4,.3,1) forwards}
 @keyframes stamp{0%{opacity:0;transform:rotate(-7deg) scale(3.2)}9%{opacity:1;transform:rotate(-7deg) scale(.92)}15%{transform:rotate(-7deg) scale(1)}78%{opacity:1}100%{opacity:0;transform:rotate(-7deg) scale(1.04)}}
+/* ---- 配る版の、最初の質問 ---- */
+.ecard{text-align:center;width:min(760px,94vw)}
+#entry1.hide,#entry2.hide{display:none}
+#entry .card > *{animation:none !important;opacity:1}
+.ecard .logo{display:inline-block;text-align:left}
+.eq{font:700 clamp(17px,2.4vw,24px)/1.3 var(--jp);margin:22px 0 4px;color:var(--paper)}
+.ebtns{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin-top:12px}
+.ebtns button.go{flex:1 1 250px;max-width:340px;margin:0;padding:18px 14px;font-size:clamp(17px,2.2vw,22px)}
+.ebtns small{display:block;margin-top:8px;font:500 12px/1.3 var(--jp);letter-spacing:.02em;opacity:.85}
+/* ---- スマホ: 画面のスティックとボタン ---- */
+canvas#view{touch-action:none}
+body.touch{-webkit-touch-callout:none;-webkit-user-select:none;--sr:env(safe-area-inset-right,0px);--sl:env(safe-area-inset-left,0px);--sb:env(safe-area-inset-bottom,0px)}
+body.touch #hint{display:none}
+body.touch #finSkip{pointer-events:auto;padding:12px 14px;font-size:13px;color:#fff;background:rgba(7,10,20,.55);border-radius:8px}
+#touch{position:fixed;inset:0;z-index:7;display:none;pointer-events:none;touch-action:none;-webkit-user-select:none;user-select:none}
+#touch.on{display:block}
+#tZone{position:absolute;left:0;top:22%;width:46%;bottom:0;pointer-events:auto;touch-action:none}
+#tStick{position:absolute;left:calc(86px + var(--sl));top:calc(100% - 92px - var(--sb));width:108px;height:108px;margin:-54px 0 0 -54px;border-radius:50%;border:2px solid rgba(255,255,255,.3);background:rgba(10,16,40,.3);opacity:.5;pointer-events:none}
+#tStick.on{opacity:.95;border-color:var(--turbo)}
+#tStick i{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px;border-radius:50%;background:rgba(255,255,255,.55);box-shadow:0 0 14px rgba(43,232,200,.5)}
+.tb{position:absolute;pointer-events:auto;touch-action:none;border-radius:50%;border:2px solid rgba(255,255,255,.42);background:rgba(10,16,40,.46);color:#fff;font:700 13px/1 var(--jp);padding:0;margin:0;-webkit-tap-highlight-color:transparent;-webkit-appearance:none;appearance:none}
+.tb.on{background:rgba(255,206,74,.82);color:#0a1028;transform:scale(.93)}
+.tb[data-k=atk]{right:calc(16px + var(--sr));bottom:calc(18px + var(--sb));width:82px;height:82px;font-size:17px;border-color:var(--sun)}
+.tb[data-k=jump]{right:calc(108px + var(--sr));bottom:calc(10px + var(--sb));width:64px;height:64px}
+.tb[data-k=sp]{right:calc(12px + var(--sr));bottom:calc(110px + var(--sb));width:64px;height:64px;border-color:var(--spark)}
+.tb[data-k=rng]{right:calc(92px + var(--sr));bottom:calc(84px + var(--sb));width:60px;height:60px;border-color:var(--turbo)}
+.tb[data-k=dodge]{right:calc(182px + var(--sr));bottom:calc(12px + var(--sb));width:52px;height:52px;font-size:12px}
+.tb[data-k=guard]{right:calc(164px + var(--sr));bottom:calc(74px + var(--sb));width:52px;height:52px;font-size:11px}
+.tb[data-k=duo]{right:calc(86px + var(--sr));bottom:calc(154px + var(--sb));width:50px;height:50px;font-size:12px}
+.tb[data-k=sup]{right:calc(146px + var(--sr));bottom:calc(138px + var(--sb));width:52px;height:52px;font-size:11px;border-color:var(--sun)}
+#tPause{position:absolute;left:50%;top:6px;transform:translateX(-50%);width:44px;height:30px;pointer-events:auto;touch-action:none;border-radius:8px;border:1px solid rgba(255,255,255,.35);background:rgba(10,16,40,.5);color:#fff;font:700 13px/1 var(--jp);padding:0;-webkit-appearance:none;appearance:none}
+#tRotate{position:fixed;inset:0;z-index:30;display:none;place-items:center;background:#070a14;color:#fff;font:700 17px/1.6 var(--jp);text-align:center}
+#tRotate.on{display:grid}
+#tRotate b{display:block;font-size:54px;line-height:1.1;color:var(--sun)}
+@media (max-height:480px){ .card{padding:10px 16px} .logo .en{font-size:clamp(30px,7vw,54px) !important} }
 /* ---- 5 面クリアのあとの大演出 ---- */
 .webonly{display:none !important}
 body.web .webonly{display:flex !important}
@@ -350,6 +388,26 @@ button.go:focus-visible{outline:3px solid var(--spark);outline-offset:4px}
 <div id="finWhite"><div id="finWhiteT"></div></div>
 <div id="flash"></div>
 
+<div class="screen hide" id="entry">
+  <div class="card ecard">
+    <h1 class="logo"><span class="en">NEON KNUCKLE</span><span class="jp">ネオンナックル ― 5億年商店街の乱</span></h1>
+    <div id="entry1">
+      <p class="eq">どちらで遊びますか？</p>
+      <div class="ebtns">
+        <button class="go" id="eSp">スマホ・タブレット<small>横向きにして、画面のボタンで操作</small></button>
+        <button class="go alt" id="ePc">パソコン<small>キーボードかゲームパッドで操作</small></button>
+      </div>
+    </div>
+    <div id="entry2" class="hide">
+      <p class="eq">キャラはどうしますか？</p>
+      <div class="ebtns">
+        <button class="go" id="eDef">そのままのキャラで遊ぶ<small>ジャイ美・スネ子・井上博士・トニオ</small></button>
+        <button class="go alt" id="eVrm">自分の VRM を使う<small>.vrm ファイルを選びます（どこにも送りません）</small></button>
+      </div>
+      <p class="fine" id="eNote"></p>
+    </div>
+  </div>
+</div>
 <div class="screen" id="title">
   <div class="card">
     <h1 class="logo"><span class="en">NEON KNUCKLE</span><span class="jp">ネオンナックル ― 5億年商店街の乱</span></h1>
@@ -371,7 +429,7 @@ button.go:focus-visible{outline:3px solid var(--spark);outline-offset:4px}
     </div>
     <button class="go" id="startBtn">START ▶▶</button><button class="go alt" id="vrBtn" style="display:none">VR 背中から ▶▶</button><button class="go alt" id="vrBtn2" style="display:none;font-size:17px">VR 俯瞰 ▶▶</button>
     <p class="fine" id="vrNote" style="display:none;color:#FFB3C6"></p>
-    <p class="webcredit webonly">ブラウザ版（声なし・AI なし）。キーボードかゲームパッドで遊べます。モーション: A&amp;M Mocap ／ 効果音: Universal Sound FX・Game Sound FX Pack ／ three.js・@pixiv/three-vrm</p>
+    <p class="webcredit webonly">ブラウザ版（声なし・AI なし）。パソコンはキーボードかゲームパッド、スマホは横向きにして画面のボタンで遊べます。モーション: A&amp;M Mocap ／ 効果音: Universal Sound FX・Game Sound FX Pack ／ three.js・@pixiv/three-vrm</p>
     <p class="hx"><em>03</em>&nbsp;// CONTROLS（下に続きます）</p>
     <div class="keys">
       <div><kbd>← → ↑ ↓ / WASD</kbd><span>移動（↑↓で奥・手前）。← か → をすばやく 2 回で走る</span></div>
