@@ -194,20 +194,27 @@ body.touch #finSkip{pointer-events:auto;padding:12px 14px;font-size:13px;color:#
 #touch{position:fixed;inset:0;z-index:7;display:none;pointer-events:none;touch-action:none;-webkit-user-select:none;user-select:none}
 #touch.on{display:block}
 #tZone{position:absolute;left:0;top:22%;width:46%;bottom:0;pointer-events:auto;touch-action:none}
-#tStick{position:absolute;left:calc(86px + var(--sl));top:calc(100% - 92px - var(--sb));width:108px;height:108px;margin:-54px 0 0 -54px;border-radius:50%;border:2px solid rgba(255,255,255,.3);background:rgba(10,16,40,.3);opacity:.5;pointer-events:none}
-#tStick.on{opacity:.95;border-color:var(--turbo)}
-#tStick i{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px;border-radius:50%;background:rgba(255,255,255,.55);box-shadow:0 0 14px rgba(43,232,200,.5)}
-.tb{position:absolute;pointer-events:auto;touch-action:none;border-radius:50%;border:2px solid rgba(255,255,255,.42);background:rgba(10,16,40,.46);color:#fff;font:700 13px/1 var(--jp);padding:0;margin:0;-webkit-tap-highlight-color:transparent;-webkit-appearance:none;appearance:none}
-.tb.on{background:rgba(255,206,74,.82);color:#0a1028;transform:scale(.93)}
-.tb[data-k=atk]{right:calc(16px + var(--sr));bottom:calc(18px + var(--sb));width:82px;height:82px;font-size:17px;border-color:var(--sun)}
-.tb[data-k=jump]{right:calc(108px + var(--sr));bottom:calc(10px + var(--sb));width:64px;height:64px}
-.tb[data-k=sp]{right:calc(12px + var(--sr));bottom:calc(110px + var(--sb));width:64px;height:64px;border-color:var(--spark)}
-.tb[data-k=rng]{right:calc(92px + var(--sr));bottom:calc(84px + var(--sb));width:60px;height:60px;border-color:var(--turbo)}
-.tb[data-k=dodge]{right:calc(182px + var(--sr));bottom:calc(12px + var(--sb));width:52px;height:52px;font-size:12px}
-.tb[data-k=guard]{right:calc(164px + var(--sr));bottom:calc(74px + var(--sb));width:52px;height:52px;font-size:11px}
-.tb[data-k=duo]{right:calc(86px + var(--sr));bottom:calc(154px + var(--sb));width:50px;height:50px;font-size:12px}
-.tb[data-k=sup]{right:calc(146px + var(--sr));bottom:calc(138px + var(--sb));width:52px;height:52px;font-size:11px;border-color:var(--sun)}
+#tStick{position:absolute;left:calc(74px + var(--sl));top:calc(100% - 78px - var(--sb));width:88px;height:88px;margin:-44px 0 0 -44px;border-radius:50%;border:2px solid rgba(255,255,255,.26);background:rgba(10,16,40,.2);opacity:.4;pointer-events:none}
+#tStick.on{opacity:.9;border-color:var(--turbo)}
+#tStick i{position:absolute;left:50%;top:50%;width:40px;height:40px;margin:-20px;border-radius:50%;background:rgba(255,255,255,.5);box-shadow:0 0 12px rgba(43,232,200,.5)}
+.tb{position:absolute;pointer-events:auto;touch-action:none;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);background:rgba(10,16,40,.32);color:#fff;font:700 10px/1 var(--jp);letter-spacing:-.02em;white-space:nowrap;padding:0;margin:0;-webkit-tap-highlight-color:transparent;-webkit-appearance:none;appearance:none;text-shadow:0 0 4px #000,0 0 2px #000}
+.tb.on{background:rgba(255,206,74,.85);color:#0a1028;text-shadow:none;transform:scale(.92)}
+.tb[data-k=atk]{right:calc(14px + var(--sr));bottom:calc(14px + var(--sb));width:64px;height:64px;font-size:14px;border-width:2px;border-color:var(--sun)}
+.tb[data-k=jump]{right:calc(86px + var(--sr));bottom:calc(8px + var(--sb));width:52px;height:52px;font-size:12px}
+.tb[data-k=rng]{right:calc(84px + var(--sr));bottom:calc(66px + var(--sb));width:40px;height:40px;border-color:var(--turbo)}
+.tb[data-k=sp]{right:calc(34px + var(--sr));bottom:calc(84px + var(--sb));width:40px;height:40px;border-color:var(--spark)}
+.tb[data-k=dodge]{right:calc(144px + var(--sr));bottom:calc(8px + var(--sb));width:36px;height:36px}
+.tb[data-k=guard]{right:calc(132px + var(--sr));bottom:calc(50px + var(--sb));width:36px;height:36px}
+.tb[data-k=duo]{right:calc(70px + var(--sr));bottom:calc(112px + var(--sb));width:36px;height:36px}
+.tb[data-k=sup]{right:calc(22px + var(--sr));bottom:calc(130px + var(--sb));width:38px;height:38px;border-color:var(--sun)}
 #tPause{position:absolute;left:50%;top:6px;transform:translateX(-50%);width:44px;height:30px;pointer-events:auto;touch-action:none;border-radius:8px;border:1px solid rgba(255,255,255,.35);background:rgba(10,16,40,.5);color:#fff;font:700 13px/1 var(--jp);padding:0;-webkit-appearance:none;appearance:none}
+/* スマホでは、上の体力の板などを小さくする（いまの 6 割） */
+body.touch .pl{zoom:.6}
+body.touch #enemy{zoom:.66}
+body.touch #go{font-size:38px}
+body.touch .combo{--fs:30px}
+body.touch #bubble{font-size:12.5px;max-width:230px;padding:6px 11px;border-width:1.5px}
+body.touch #wphint{font-size:11px}
 #tRotate{position:fixed;inset:0;z-index:30;display:none;place-items:center;background:#070a14;color:#fff;font:700 17px/1.6 var(--jp);text-align:center}
 #tRotate.on{display:grid}
 #tRotate b{display:block;font-size:54px;line-height:1.1;color:var(--sun)}

@@ -47,13 +47,45 @@ const rim = new T.DirectionalLight(0xff4f8a, 1.1); rim.position.set(-5, 3, -6); 
 const rim2 = new T.DirectionalLight(0x2be8c8, 0.7); rim2.position.set(6, 2, -5); scene.add(rim2);
 let halfW = 6;
 let composer = null, bloomOn = Q.get('bloom') !== '0';
+// ---- 小さい画面（スマホ）のカメラ ----
+// ① 横長の画面でも、見える横幅はパソコン（16:9）と同じにする（= そのぶん大きく映る。上下が少し切れる）
+// ② 戦いが始まったら、戦っている全員が収まる範囲で寄る（最大 1.25 倍）。敵が端から来たら、すぐ引く
+let smallScreen = false;
+const BASE_FOV = 36, SC_MAX = 1.25, SCAM = { k: 1, dx: 0 };
+function baseFov() {
+  if (!smallScreen) return BASE_FOV;
+  const a = camera.aspect, w = 16 / 9;
+  return a > w ? T.MathUtils.radToDeg(2 * Math.atan(Math.tan(T.MathUtils.degToRad(BASE_FOV / 2)) * w / a)) : BASE_FOV;
+}
+function smartCam(dt, cx) {
+  let kT = 1, xT = 0;
+  if (smallScreen && G.phase === 'play' && !G.cine && !G.finale) {
+    const fs = fighters.filter(f => f.alive && !f.out && f.state !== 'dead' && (f.team !== 'enemy' || (Math.abs(f.x - cx) < halfW + .3 && !(f.ai && f.ai.door && f.ai.wait > 0))));
+    if (fs.some(f => f.team === 'enemy')) {
+      let x0 = 1e9, x1 = -1e9; for (const f of fs) { x0 = Math.min(x0, f.x); x1 = Math.max(x1, f.x); }
+      const lim = halfW * (1 - 1 / SC_MAX); xT = clamp((x0 + x1) / 2 - cx, -lim, lim);
+      const tv = Math.tan(T.MathUtils.degToRad(baseFov() / 2)), pitch = Math.atan2(CAM_Y - LOOK_Y, CAM_Z);
+      let k = SC_MAX;
+      for (const f of fs) {
+        const d = CAM_Z - f.z, sc = d / CAM_Z;                                                   // 手前にいる人ほど、画面の端に寄って見える
+        k = Math.min(k, halfW * sc / (Math.abs(f.x - cx - xT) + 1.3));
+        const up = pitch - Math.atan2(CAM_Y - ((f.y || 0) + 1.9 * f.scl + .4), d); if (up > 0) k = Math.min(k, tv * .9 / Math.tan(up));   // 頭の上
+        const dn = Math.atan2(CAM_Y, d) - pitch; if (dn > 0) k = Math.min(k, tv * .8 / Math.tan(dn));                                    // 足もと
+      }
+      kT = clamp(k, 1, SC_MAX);
+    }
+  }
+  SCAM.k += (kT - SCAM.k) * (1 - Math.exp(-dt * (kT < SCAM.k ? 4.5 : 1.3)));   // 引くときは速く、寄るときはゆっくり
+  const lim2 = halfW * (1 - 1 / SCAM.k);
+  SCAM.dx += (clamp(xT, -lim2, lim2) - SCAM.dx) * (1 - Math.exp(-dt * 2.4)); SCAM.dx = clamp(SCAM.dx, -lim2, lim2);
+}
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h, false);
   if (composer) composer.setSize(w, h);
   camera.aspect = w / h; camera.updateProjectionMatrix();
   const dist = Math.hypot(CAM_Z, CAM_Y - LOOK_Y);
-  halfW = Math.tan(T.MathUtils.degToRad(camera.fov / 2)) * dist * camera.aspect;
+  halfW = Math.tan(T.MathUtils.degToRad(baseFov() / 2)) * dist * camera.aspect;
 }
 addEventListener('resize', resize); resize();
 // 光のにじみ（ブルーム）: 火花やネオンがふわっと光る。VR 中は使わない。B キーで入り切り。部品が読めなければ無しで動く
@@ -4312,7 +4344,7 @@ const TP = { on: false, mx: 0, mz: 0, run: 0, p: new Set(), h: new Set(), el: nu
 const TP_BTNS = [['atk', '攻撃'], ['jump', '跳ぶ'], ['sp', '必殺'], ['rng', '波動'], ['dodge', 'よけ'], ['guard', 'ガード'], ['duo', '連携'], ['sup', '超必殺']];
 function touchSetup() {
   if (TP.on) return; TP.on = true;
-  document.body.classList.add('touch'); if (!Q.get('bloom')) bloomOn = false;   // スマホは光のにじみを切って軽くする
+  document.body.classList.add('touch'); if (!Q.get('bloom')) bloomOn = false; smallScreen = true; resize();   // スマホは光のにじみを切って軽くする
   const root = document.createElement('div'); root.id = 'touch';
   root.innerHTML = '<div id="tZone"></div><div id="tStick"><i></i></div>' + TP_BTNS.map(([k, t]) => `<button class="tb" data-k="${k}">${t}</button>`).join('') + '<button id="tPause">Ⅱ</button>';
   document.body.appendChild(root); TP.el = root;
@@ -6612,10 +6644,12 @@ function frame() {
   } else {
     XR.on = false;
     if (rig.scale.x !== 1 || rig.rotation.y) { rig.scale.setScalar(1); rig.position.set(0, 0, 0); rig.rotation.y = 0; vrHud.position.set(0, 1.78, -1.9); vrHud.rotation.x = .12; vrBack.y0 = null; vrHud.visible = false; vrBubble.visible = false; }
-    const fv = 36 - camPunch * 1.8; if (Math.abs(camera.fov - fv) > .01) { camera.fov = fv; camera.updateProjectionMatrix(); }   // 大きく当たった瞬間、少しだけ寄る
+    smartCam(dt, cx);
+    const bf = G.finale ? BASE_FOV : baseFov(), fv = (SCAM.k > 1.001 ? T.MathUtils.radToDeg(2 * Math.atan(Math.tan(T.MathUtils.degToRad(bf / 2)) / SCAM.k)) : bf) - camPunch * 1.8;
+    if (Math.abs(camera.fov - fv) > .01) { camera.fov = fv; camera.updateProjectionMatrix(); }   // 大きく当たった瞬間、少しだけ寄る
     if (G.cine && G.cine.D.sup) cineCamera(dt, sx, sy);
     else if (G.finale) finaleCamera(dt, sx, sy);
-    else { camera.position.set(cx + sx, CAM_Y + sy, CAM_Z); camera.lookAt(cx + sx * .5, LOOK_Y, 0); }
+    else { camera.position.set(cx + SCAM.dx + sx, CAM_Y + sy, CAM_Z); camera.lookAt(cx + SCAM.dx + sx * .5, LOOK_Y, 0); }
     if (camHook) camHook(camera);
   }
   touchFrame();
@@ -6937,6 +6971,6 @@ async function vrSetup(now) {
 addEventListener('focus', () => { if (!VRB.ok) vrSetup(); }); document.addEventListener('visibilitychange', () => { if (!VRB.ok && document.visibilityState === 'visible') vrSetup(); });
 navigator.xr?.addEventListener?.('devicechange', () => vrSetup());
 vrSetup();
-window.__brawl = { TP, touchSetup, CLIPS, PROFILES, STYLES, DUOS, SUPER_PRE, loadProfile, loadClip, loadDuoClips, loadMotionCfg, motionCfg: () => MOTION_CFG, SMP, T, weaponSync, finaleStart, finaleTick, finaleEnd, finaleSkip, finaleDebug, fin: () => G.finale, voidFx: () => voidFx, VR_PAD, drawVrHelp, vrHelpCv, XR, xrTest: (sources, dt = 1 / 60) => { const o = renderer.xr.getSession; renderer.xr.getSession = () => ({ inputSources: sources }); try { pollXR(dt); } finally { renderer.xr.getSession = o; } return JSON.parse(JSON.stringify({ ...XR, prev: undefined, view: vrView })); }, spin: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) { gameTime += dt; if (hitStop > 0) hitStop -= dt; else if (G.phase === 'play' || G.phase === 'ending' || G.phase === 'tally') sim(dt); if (G.finale) finaleTick(dt); for (const f of fighters) { if (f.body && !f.out) vfxFighter(f, dt, false); } for (const fn of stageAnim) fn(dt); gimFrame(dt); updateFx(dt); } }, fxStep: (dt) => { for (const f of fighters) vfxFighter(f, dt, false); updateFx(dt); }, flow, curlNoise, hermite, noiseGrad, rig, vrHud, vrBackRig, setVrView, vrView: () => vrView, DUOS, startDuo, tryDuo, trySuper, addMeter, cine: () => G.cine, hs: (v) => { if (v != null) hitStop = v; return hitStop; }, gims: () => gims, holes: () => holes, vends: () => vends, doors: () => stageDoors, items: () => items, spawnItem, COPY, takeCapsule, pressGag, envHit, gag: () => gag, hazards: () => hazards, spawnBolts, blinkAway, WEAPONS, spawnWeapon, holdWeapon, pickWeapon, gweapons: () => gweapons, STAGES, ENEMIES, enterStage, stageClear, tallyKey, buildStage, theme: () => stageTheme, flushFx: () => { for (const e of fx) scene.remove(e.o); fx = []; }, sfx, fx: { glow, smoke, streaks, trails, fxHit, fxKO, fxExplode, fxSpecial, fxClear, numFx }, comboHit, CLIPS, PROFILES, shots: () => shots, startMove, startDodge, applyHit, aiEnemy, nearestHero, getEngaged: () => engaged, halfW: () => halfW, G, fighters: () => fighters, startGame, spawnEnemy, keys, pressed, MOVES, camera, setCam: (fn) => { camHook = fn; }, setInput: (fn) => { inputOverride = fn; }, step: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) { if (G.phase !== 'play' && G.phase !== 'ending' && G.phase !== 'tally') break; if (hitStop > 0) { hitStop -= dt; continue; } sim(dt); if (G.finale) finaleTick(dt); } } };
+window.__brawl = { TP, touchSetup, SCAM, smartCam, baseFov, camera, halfW: () => halfW, CLIPS, PROFILES, STYLES, DUOS, SUPER_PRE, loadProfile, loadClip, loadDuoClips, loadMotionCfg, motionCfg: () => MOTION_CFG, SMP, T, weaponSync, finaleStart, finaleTick, finaleEnd, finaleSkip, finaleDebug, fin: () => G.finale, voidFx: () => voidFx, VR_PAD, drawVrHelp, vrHelpCv, XR, xrTest: (sources, dt = 1 / 60) => { const o = renderer.xr.getSession; renderer.xr.getSession = () => ({ inputSources: sources }); try { pollXR(dt); } finally { renderer.xr.getSession = o; } return JSON.parse(JSON.stringify({ ...XR, prev: undefined, view: vrView })); }, spin: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) { gameTime += dt; if (hitStop > 0) hitStop -= dt; else if (G.phase === 'play' || G.phase === 'ending' || G.phase === 'tally') sim(dt); if (G.finale) finaleTick(dt); for (const f of fighters) { if (f.body && !f.out) vfxFighter(f, dt, false); } for (const fn of stageAnim) fn(dt); gimFrame(dt); updateFx(dt); } }, fxStep: (dt) => { for (const f of fighters) vfxFighter(f, dt, false); updateFx(dt); }, flow, curlNoise, hermite, noiseGrad, rig, vrHud, vrBackRig, setVrView, vrView: () => vrView, DUOS, startDuo, tryDuo, trySuper, addMeter, cine: () => G.cine, hs: (v) => { if (v != null) hitStop = v; return hitStop; }, gims: () => gims, holes: () => holes, vends: () => vends, doors: () => stageDoors, items: () => items, spawnItem, COPY, takeCapsule, pressGag, envHit, gag: () => gag, hazards: () => hazards, spawnBolts, blinkAway, WEAPONS, spawnWeapon, holdWeapon, pickWeapon, gweapons: () => gweapons, STAGES, ENEMIES, enterStage, stageClear, tallyKey, buildStage, theme: () => stageTheme, flushFx: () => { for (const e of fx) scene.remove(e.o); fx = []; }, sfx, fx: { glow, smoke, streaks, trails, fxHit, fxKO, fxExplode, fxSpecial, fxClear, numFx }, comboHit, CLIPS, PROFILES, shots: () => shots, startMove, startDodge, applyHit, aiEnemy, nearestHero, getEngaged: () => engaged, halfW: () => halfW, G, fighters: () => fighters, startGame, spawnEnemy, keys, pressed, MOVES, camera, setCam: (fn) => { camHook = fn; }, setInput: (fn) => { inputOverride = fn; }, step: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) { if (G.phase !== 'play' && G.phase !== 'ending' && G.phase !== 'tally') break; if (hitStop > 0) { hitStop -= dt; continue; } sim(dt); if (G.finale) finaleTick(dt); } } };
 renderer.setAnimationLoop(frame);
 log('ready');
