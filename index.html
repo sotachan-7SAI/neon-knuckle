@@ -5,6 +5,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#070a14">
+<meta name="apple-mobile-web-app-title" content="NEON KNUCKLE">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="icon.png">
 <meta name="description" content="VRM のキャラと 2 人で 5億年を殴り進む、ブラウザで遊べるベルトスクロールアクション。自分の VRM でも遊べます。">
 <meta property="og:title" content="NEON KNUCKLE ネオンナックル ― 5億年商店街の乱">
 <meta property="og:description" content="VRM のキャラと 2 人で 5億年を殴り進む、ブラウザで遊べるベルトスクロールアクション。全 5 面。自分の VRM でも遊べます。">
@@ -187,7 +190,10 @@ canvas#view{position:fixed;inset:0;width:100%;height:100%;display:block}
 .ebtns button.go{flex:1 1 250px;max-width:340px;margin:0;padding:18px 14px;font-size:clamp(17px,2.2vw,22px)}
 .ebtns small{display:block;margin-top:8px;font:500 12px/1.3 var(--jp);letter-spacing:.02em;opacity:.85}
 /* ---- スマホ: 画面のスティックとボタン ---- */
-html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%;overscroll-behavior:none}
+body{overscroll-behavior:none}
+body.touch{position:fixed;inset:0;width:100%;height:100%}
+.screen{overscroll-behavior:contain}
 body.touch.inplay,body.touch.inplay *{touch-action:none !important}
 #tZoom{position:fixed;left:50%;top:44px;transform:translateX(-50%);z-index:31;display:none;padding:8px 14px;border-radius:10px;background:rgba(200,16,46,.92);color:#fff;font:700 13px/1.4 var(--jp);text-align:center;pointer-events:none;white-space:nowrap}
 #tZoom.on{display:block}

@@ -4379,7 +4379,13 @@ function touchSetup() {
   // ブラウザそのものの拡大（2 本指でつまむ・すばやく 2 回タップ）を止める。iPhone は、ページ側の「拡大しない」指定だけでは止まらない
   const stop = (e) => e.preventDefault();
   for (const n of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(n, stop, { passive: false });
-  document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });   // スティックとボタンを同時に押すと「つまむ」と見なされるのを防ぐ
+  // ページごと動かす操作（下へ引いて閉じる・端からなぞって戻る・引っぱって読みこみ直す）を受け付けない。
+  // タイトルや一時停止などの「画面」の中と、押すためのボタンだけは、ふつうにさわれるまま
+  const uiTarget = (el) => !!(el && el.closest && !el.closest('#touch') && el.closest('button,input,a,select,textarea,.screen'));
+  document.addEventListener('touchstart', (e) => { if (!uiTarget(e.target)) e.preventDefault(); }, { passive: false, capture: true });
+  document.addEventListener('touchmove', (e) => { if (e.touches.length > 1 || !uiTarget(e.target)) e.preventDefault(); }, { passive: false, capture: true });   // 指 2 本は「つまむ」と見なされるので、いつも止める
+  // 「戻る」になってしまっても、遊んでいる間はこのページにとどまる
+  addEventListener('popstate', () => { TP.guard = false; if (G.phase !== 'title') { try { history.pushState({ nk: 1 }, ''); TP.guard = true; } catch (er) {} } });
   let lastEnd = 0;
   document.addEventListener('touchend', (e) => { const now = performance.now(); if (G.phase !== 'title' && now - lastEnd < 400) e.preventDefault(); lastEnd = now; }, { passive: false });
   document.addEventListener('dblclick', stop, { passive: false });
@@ -4405,6 +4411,7 @@ const finSkipText = () => TP.on ? 'ここを 2 回タップでスキップ' : 'E
 function touchFrame() {
   if (!TP.on) return;
   const show = G.phase === 'play' && !G.finale;
+  if (show && !TP.guard) { TP.guard = true; try { history.pushState({ nk: 1 }, ''); } catch (er) {} }
   if (show !== TP.shown) { TP.shown = show; TP.el.classList.toggle('on', show); document.body.classList.toggle('inplay', show); if (!show) { TP.p.clear(); TP.h.clear(); } }
   const port = innerHeight > innerWidth * 1.05;
   if (port !== TP.port) { TP.port = port; TP.rot.classList.toggle('on', port); }
