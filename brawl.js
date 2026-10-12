@@ -2501,9 +2501,10 @@ function tryGrab(f) {
 }
 // 当たったときの処理。m.dir = 飛ばす向き（飛び道具用）、m.x = 当たった場所。受け止められたら false
 function applyHit(a, b, m) {
-  const pow = (a.spec?.pow || 1) * ((a.copy && a.copy.pow && !m.env && m.key !== 'shot') ? a.copy.pow : 1) * (a.powMul || 1) * (a.buffT > 0 && !m.env ? 1.35 : 1);   // powMul = 起こされて怒った課長 / buffT = 相棒の応援
+  const pow = (a.spec?.pow || 1) * ((a.copy && a.copy.pow && !m.env && m.key !== 'shot') ? a.copy.pow : 1) * (a.powMul || 1) * (a.buffT > 0 && !m.env ? 1.35 : 1) * lvAtk(a, m);   // powMul = 起こされて怒った課長 / buffT = 相棒の応援
   let dmg = m.dmg * pow * (a.team === 'enemy' && G.mode === 'coop' ? DIFF_E[G.diff] : 1) * (a.team !== 'enemy' && G.mode === 'coop' && !m.env ? HERO_POW[G.diff] : 1);
   if (b.copy && b.copy.armor) dmg *= .6;   // 怪力をコピー中は打たれ強い
+  if (b.lv) dmg *= lvMul(b, 'def');           // レベルアップの防御力
   if (!m.env) addMeter(a, Math.min(dmg, b.hp) * METER_GAIN.hit);
   addMeter(b, dmg * METER_GAIN.hurt);
   const dir = m.dir || (m.around ? (Math.sign(b.x - a.x) || a.face) : a.face);
@@ -3135,7 +3136,7 @@ function aiClaude(f, dt) {
   A.run = false;
   if (!tgt && (P1.out || !P1.alive)) { c.mx = G.mode === 'coop' && !G.area ? 1 : 0; c.mz = 0; A.run = c.run = false; return; }   // 1P がいないときは、ひとりで先へ進む
   if (!tgt) {   // 敵がいないときは 1P のそばへ
-    const gx = P1.x - P1.face * 1.3 + (G.go ? 1.8 : 0), gz = P1.z + (P1.z > 0 ? -.9 : .9);
+    const gx = P1.x - P1.face * (f.isAlly ? 2.3 : 1.3) + (G.go ? 1.8 : 0), gz = P1.z + (P1.z > 0 ? -.9 : .9) * (f.isAlly ? -1 : 1);   // 3 人目は反対側
     const dx = gx - f.x, dz = gz - f.z;
     A.mx = Math.abs(dx) > .5 ? Math.sign(dx) : 0; A.mz = Math.abs(dz) > .3 ? Math.sign(dz) * .8 : 0;
     c.mx = A.mx; c.mz = A.mz; A.run = c.run = Math.abs(dx) > 3.5; return;
@@ -4203,7 +4204,7 @@ function comboHit(a, dmg, big, wx, wy, wz) {
   if (cb.t > 0) { cb.n++; cb.dmg += dmg; } else { cb.n = 1; cb.dmg = dmg; }
   cb.t = COMBO_T; cb.w[0] = wx ?? a.x; cb.w[1] = wy ?? 2.2; cb.w[2] = wz ?? a.z; cb.fresh = fresh;
   if (a.isPlayer) { G.combo = cb.n; G.comboT = cb.t; G.maxCombo = Math.max(G.maxCombo, cb.n); }
-  if (comboUI) comboUI[a.isClaude ? 1 : 0].hit(cb.n, cb.dmg, big);
+  if (comboUI && (a.isPlayer || a.isClaude)) comboUI[a.isClaude ? 1 : 0].hit(cb.n, cb.dmg, big);
 }
 function comboTick(dt) {
   if (!comboUI) return;
@@ -4321,7 +4322,7 @@ const LINES = {
 const MOODTAG = { duoC: 'strong_ok', superC: 'happy_strong', superP: 'happy_strong', vend: 'happy_mild', hole: 'happy', holeP: 'surprised', banana: 'happy', truck: 'surprised', flat: 'surprised', tarai: 'surprised', aeon: 'thinking', hazure: 'disappointed', lucky: 'happy', respawn: 'happy', chargeMax: 'happy', copy: 'proud', copyP: 'happy', start: 'happy', clear: 'happy_mild', go: 'happy_mild', hurtP: 'surprised', downC: 'sad', outC: 'sad_strong', special: 'strong_ok', throw: 'strong_ok', grab: 'proud', guard: 'proud', shot: 'strong_ok', boss: 'surprised', bossSlam: 'surprised', bossDown: 'happy_strong', item: 'happy', over: 'disappointed', vsStart: 'proud', vsHit: 'proud', vsRoundC: 'happy', vsRoundP: 'disappointed', vsWinC: 'happy_strong', vsWinP: 'sad' };
 let lastSay = -99, bubbleT = 0;
 function say(kind, prio = 0) {
-  const C = G.p2; if (!C || !G.claudeChar) return;
+  const C = G.p2; if (!C || !G.claudeChar || (C.out && G.mode === 'coop' && G.party === 1)) return;   // ひとりのときは、だれもしゃべらない
   if (gameTime - lastSay < (prio >= 2 ? 1.2 : 3.4)) return;
   const pk = G.claudeChar.name === 'トニオ' ? 'tonio' : (G.claudeChar.personality || 'genki');
   const bank = (LINES[pk] || LINES.genki)[kind] || LINES.genki[kind]; if (!bank) return;
@@ -4533,9 +4534,11 @@ async function startGame() {
   const p1 = new Fighter({ name: G.p1Char?.name || 'YOU', team: G.mode === 'vs' ? 'p1' : 'hero', isPlayer: true, body: b1, maxhp: 100, hp: 100, spd: HERO_SPD, moves: heroProf.moves, sd: heroProf.sd });
   const p2 = new Fighter({ name: G.claudeChar?.name || 'Claude', team: G.mode === 'vs' ? 'p2' : 'hero', isClaude: true, body: b2, maxhp: 100, hp: 100, spd: HERO_SPD, moves: heroProf2.moves, sd: heroProf2.sd, ai: { t: 0, atkT: 0 } });
   fighters.push(p1, p2); G.p1 = p1; G.p2 = p2;
+  G.p3 = G.mode === 'coop' && G.party === 3 ? await makeP3() : null;   // 3 人目（AI）
   comboUI.forEach(u => u.reset()); G.comboT = 0; slowT = 0;
   G.time = 0; G.combo = 0; G.maxCombo = 0; G.focus = null; G.endT = 0;
   $('p1nm').textContent = p1.name; $('p2nm').textContent = p2.name;
+  partyInit();
   if (G.mode === 'coop') {
     G.continues = 0; tallyClose();
     enterStage(clamp((G.startStage || +Q.get('stage') || 1) - 1, 0, STAGES.length - 1), true); G.startStage = 0;   // タイトルで数字の 2 を押すと 2 面から始まる（確認用）
@@ -5119,6 +5122,7 @@ const METER_GAIN = { hit: .45, hurt: 1.5, guard: 8 };   // 与えたダメージ
 const DUO_DMG = 100;                                     // 連携技（1 本）の合計ダメージ
 function addMeter(f, v) {
   if (!f || f.team === 'enemy' || G.mode !== 'coop' || !(v > 0)) return;
+  v *= lvMul(f, 'meter');
   const m0 = f.meter || 0, b0 = Math.floor(m0 / 100);
   f.meter = Math.min(METER_MAX, m0 + v);
   const b1 = Math.floor(f.meter / 100);
@@ -5181,14 +5185,14 @@ function tryDuo(f) {
   const tgt = duoTarget(f, 3.3, false);
   if (!tgt) { if (f.isPlayer && (f.duoMsg || 0) < gameTime) { f.duoMsg = gameTime + 1.5; toastAt(f, '近くに相手がいない'); } return false; }
   f.meter -= 100;
-  return startDuo(f, tgt, DUOS[pick(keys)], DUO_DMG);
+  return startDuo(f, tgt, DUOS[pick(keys)], DUO_DMG * lvMul(f, 'sp'));
 }
 function trySuper(f) {
   if (G.cine || G.mode !== 'coop' || (f.meter || 0) < METER_MAX || !duoReady(DUOS.super)) return false;
   const tgt = duoTarget(f, 99, true);
   if (!tgt) { if (f.isPlayer && (f.duoMsg || 0) < gameTime) { f.duoMsg = gameTime + 1.5; toastAt(f, '相手がいない'); } return false; }
   f.meter = 0;
-  return startDuo(f, tgt, DUOS.super, Math.max(160, tgt.maxhp / 3));   // ボスには最大体力の 3 分の 1
+  return startDuo(f, tgt, DUOS.super, Math.max(160, tgt.maxhp / 3) * lvMul(f, 'sp'));   // ボスには最大体力の 3 分の 1
 }
 function startDuo(a, v, D, total) {
   const ca = CLIPS.get(D.a), cv = CLIPS.get(D.v);
@@ -6639,6 +6643,210 @@ Object.assign(PROFILES.hvy.st, {
   ranged:  { seq: [{ c: 'SpecialAttack1', s: 0, e: .42, sp: 1.3 }, { c: 'RangeAttack2', s: .62, e: 1.22, sp: 1.3 }], shot: .33 },   // 両こぶしを振り上げて → 両手で突き出す
   ranged2: { seq: [{ c: 'SpecialAttack1', s: 0, e: .44, sp: 1.2 }, { c: 'SpecialAttack1', s: .44, e: 1.15, sp: 1.2 }], shot: .4 }, // 振り上げて → 地面ごと叩く
 });
+// =========================================================================================
+// 2026-10-13 (4): 人数（1〜3 人）とレベルアップ
+//   ① 人数: ひとりで / Claude と 2 人 / 3 人（AI がもう 1 人）。人数に合わせて敵の数と体力が変わる
+//      クリアのボーナスは、ひとりだと 2 倍、3 人だと 3 分の 2（ひとりの 3 分の 1）
+//   ② レベルアップ: 面をクリアするたびに、ポイントを好きな能力へ振り分ける（ひとり 30 / 2 人 15 / 3 人 10）
+//      相棒たちは自動で振り分ける
+// =========================================================================================
+G.party = (() => { let v = +Q.get('party'); try { v = v || +localStorage.getItem('brawl.party'); } catch (e) {} return [1, 2, 3].includes(v) ? v : 2; })();
+const HERO3 = { color: 0xff8a3a, accent: 0xffe14a, scale: 1 };
+const partyN = () => G.mode === 'coop' ? G.party : 2;
+async function makeP3() {
+  const ch = G.p3Char || CHARS.find(c => c !== G.p1Char && c !== G.claudeChar && c.vrm) || null;
+  G.p3Char = ch;
+  const sty = ['street', 'hvy', 'female'].find(k => PROFILES[k] && STYLES[k] && k !== G.p2Style && k !== G.p1Style) || 'street';
+  const [b3, prof] = await Promise.all([loadBody(ch, HERO3), loadProfile(sty, 'hero')]);
+  b3.setLib(prof);
+  const p3 = new Fighter({ name: ch?.name || 'ロボ 3号', team: 'hero', isAlly: true, body: b3, maxhp: 100, hp: 100, spd: HERO_SPD, moves: prof.moves, sd: prof.sd, ai: { t: 0, atkT: 0 } });
+  fighters.push(p3); return p3;
+}
+// 面のはじめ: 3 人目を並べる / ひとりなら相棒を外す
+function partyStage() {
+  const P3 = G.p3;
+  if (P3) {
+    Object.assign(P3, { out: false, pit: null, flat: 0, alive: true, hp: P3.maxhp, state: G.heroProf?.ent.intro ? 'intro' : 'idle', t: 0, vx: 0, vy: 0, vz: 0, y: 0, move: null, victim: null, holder: null, inv: 1, comboT: 0, fast: false, shotCd: 0, face: 1, x: -5.3, z: .9, deaths: 0 });
+    endCopy(P3); P3.body.root.visible = true; G.score3 = P3.score;
+  }
+  partyOut();
+}
+function partyOut() {
+  const solo = G.mode === 'coop' && G.party === 1, P2 = G.p2;
+  if (P2 && solo) { P2.out = true; P2.state = 'idle'; P2.move = null; P2.x = G.camX - 40; if (P2.weapon) unhold(P2); P2.body.root.visible = false; }
+  const e2 = $('p2'); if (e2) e2.style.display = solo ? 'none' : '';
+  const e3 = $('p3'); if (e3) e3.style.display = G.p3 && G.mode === 'coop' ? '' : 'none';
+  if (G.p3 && $('p3nm')) $('p3nm').textContent = G.p3.name + (G.lvN > 1 ? ` Lv.${G.lvN}` : '');
+}
+// 敵の数: 3 人なら波ごとに 1 体ふやす / ひとりなら 3 体以上の波を 1 体へらす（ボス・中ボスの波はそのまま）
+function partyWave(w) {
+  if (G.mode !== 'coop') return w;
+  const special = w.some(t => ENEMIES[t].boss || ENEMIES[t].mid);
+  if (G.party === 3 && !special) return [...w, pick(STAGES[G.stage].minions || ['grunt'])];
+  if (G.party === 3 && special) return [...w, pick(STAGES[G.stage].minions || ['grunt'])];
+  if (G.party === 1 && w.length >= 3 && !special) return w.slice(0, -1);
+  return w;
+}
+
+// ---- レベルアップ ----
+const LV_STATS = [
+  { k: 'atk',   name: 'ノーマル攻撃力', desc: 'パンチ・キック・投げ',            per: 3,   unit: '%' },
+  { k: 'wpn',   name: '武器攻撃力',     desc: '拾った武器で殴る',                per: 4,   unit: '%' },
+  { k: 'sp',    name: '必殺技の攻撃力', desc: '必殺・波動・連携技・超必殺',      per: 4,   unit: '%' },
+  { k: 'meter', name: '必殺ゲージ',     desc: 'たまりやすくする',                per: 4,   unit: '%' },
+  { k: 'def',   name: '防御力',         desc: '受けるダメージを減らす',          per: 2.5, unit: '%', cap: 60 },
+  { k: 'spd',   name: '素早さ',         desc: '歩く・走る速さ',                  per: 1.5, unit: '%', cap: 45 },
+  { k: 'hp',    name: '体力',           desc: '体力ゲージを伸ばす',              per: 3,   unit: '' },
+];
+const LV_SP = new Set(['special', 'special2', 'shot', 'duo']);
+const lvOf = (f, k) => (f && f.lv && f.lv[k]) || 0;
+function lvMul(f, k) {
+  const v = lvOf(f, k); if (!v) return 1;
+  const S = LV_STATS.find(s => s.k === k), e = Math.min(S.cap || 1e9, v * S.per) / 100;
+  return k === 'def' ? 1 - e : 1 + e;
+}
+function lvAtk(a, m) {   // applyHit の攻撃力にかける
+  if (!a || !a.lv || m.env) return 1;
+  if (m.wk || m.weapon) return lvMul(a, 'wpn');
+  if (LV_SP.has(m.key)) return lvMul(a, 'sp');
+  return lvMul(a, 'atk');
+}
+function lvApply(f) {
+  if (!f || !f.lv) return;
+  f.spd = HERO_SPD * lvMul(f, 'spd');
+  f.maxhp = 100 + lvOf(f, 'hp') * 3; f.hp = f.maxhp;
+}
+const lvZero = () => Object.fromEntries(LV_STATS.map(s => [s.k, 0]));
+function partyInit() {
+  G.lvN = 1;
+  for (const h of heroes()) h.lv = lvZero();
+  partyOut();
+}
+// 相棒は自動で振り分ける（攻撃・体力・必殺・防御を中心に、ぐるぐる）
+const LV_AUTO = ['atk', 'hp', 'sp', 'def', 'atk', 'meter', 'hp', 'spd', 'wpn', 'sp'];
+function lvAuto(f, n) { if (!f.lv) f.lv = lvZero(); for (let i = 0; i < n; i++) { const k = LV_AUTO[(f.lvI = (f.lvI || 0) + 1) % LV_AUTO.length]; f.lv[k]++; } }
+const LV = { open: false, sel: 0, add: lvZero(), left: 0, total: 0, el: null };
+function lvPoints() { return Math.round(30 / partyN()); }
+function lvBuild() {
+  if (LV.el) return LV.el;
+  const st = document.createElement('style');
+  st.textContent = `#lvup{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(6,8,20,.72);font-family:var(--jp,sans-serif)}
+#lvup.hide{display:none}
+#lvup .lv-in{width:min(720px,94vw);max-height:94vh;overflow:auto;background:#0B122A;border:2px solid #FFCE4A;box-shadow:0 0 0 4px #10121c,0 0 40px rgba(255,206,74,.35);padding:18px 20px 16px;color:#F4F1E8}
+#lvup h2{margin:0;font:900 30px/1.1 var(--disp,sans-serif);letter-spacing:.06em;color:#FFCE4A;text-shadow:3px 3px 0 #10121c}
+#lvup .lv-sub{margin:4px 0 10px;font-size:13px;color:#A9B3D6}
+#lvup .lv-left{font:800 18px/1 var(--ui,sans-serif);margin:0 0 10px}
+#lvup .lv-left b{color:#2BE8C8;font-size:26px}
+#lvup .lv-row{display:grid;grid-template-columns:150px 1fr auto auto auto;align-items:center;gap:8px;padding:6px 8px;border:1px solid #233158;margin-bottom:4px;cursor:pointer}
+#lvup .lv-row.on{border-color:#2BE8C8;background:#10204a}
+#lvup .lv-row .n{font-weight:800;font-size:15px}
+#lvup .lv-row .d{font-size:11px;color:#A9B3D6}
+#lvup .lv-row .v{font:700 14px/1 var(--ui,sans-serif);min-width:92px;text-align:right;font-variant-numeric:tabular-nums}
+#lvup .lv-row .v i{font-style:normal;color:#2BE8C8}
+#lvup .lv-row button{font:900 18px/1 sans-serif;width:38px;height:34px;color:#10121c;background:#FFCE4A;border:0;cursor:pointer}
+#lvup .lv-row button.m{background:#5a6a9a;color:#fff}
+#lvup .lv-btns{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center}
+#lvup .lv-btns button{font:800 16px/1 var(--jp,sans-serif);padding:12px 18px;border:0;cursor:pointer}
+#lvup .lv-ok{background:#2BE8C8;color:#10121c}
+#lvup .lv-auto,#lvup .lv-reset{background:#233158;color:#F4F1E8}
+#lvup .lv-hint{font-size:12px;color:#A9B3D6;margin-left:auto}
+@media (max-height:540px){#lvRows{display:grid;grid-template-columns:1fr 1fr;gap:4px}#lvup .lv-in{padding:10px 12px}#lvup .lv-row{grid-template-columns:1fr auto auto auto;padding:4px 6px;margin:0}#lvup .lv-row .d{display:none}#lvup h2{font-size:20px}#lvup .lv-sub{margin:2px 0 4px;font-size:11px}#lvup .lv-left{margin:0 0 6px;font-size:14px}#lvup .lv-left b{font-size:20px}#lvup .lv-hint{display:none}#lvup .lv-row button{width:30px;height:26px;font-size:15px}#lvup .lv-row .n{font-size:13px}#lvup .lv-row .v{min-width:70px;font-size:12px}#lvup .lv-btns{margin-top:6px}#lvup .lv-btns button{padding:8px 12px;font-size:14px}}
+@media (max-width:640px){#lvup .lv-row{grid-template-columns:1fr auto auto auto}#lvup .lv-row .d{display:none}#lvup h2{font-size:24px}}`;
+  document.head.appendChild(st);
+  const el = document.createElement('div'); el.id = 'lvup'; el.className = 'hide';
+  el.innerHTML = `<div class="lv-in"><h2 id="lvTi">LEVEL UP!</h2><div class="lv-sub" id="lvSub"></div><div class="lv-left">のこり <b id="lvLeft">0</b> ポイント</div><div id="lvRows"></div>
+  <div class="lv-btns"><button class="lv-ok" id="lvOk">決定 ▶</button><button class="lv-auto" id="lvAuto">おまかせ</button><button class="lv-reset" id="lvReset">やりなおす</button><span class="lv-hint">↑↓ で選ぶ　←→ で振り分け　Enter で決定</span></div></div>`;
+  document.body.appendChild(el); LV.el = el;
+  const rows = $('lvRows');
+  LV_STATS.forEach((s, i) => {
+    const r = document.createElement('div'); r.className = 'lv-row'; r.dataset.i = i;
+    r.innerHTML = `<div><div class="n">${s.name}</div></div><div class="d">${s.desc}</div><div class="v"></div><button class="m">−</button><button class="p">＋</button>`;
+    r.onclick = (e) => { LV.sel = i; if (e.target.classList.contains('p')) lvStep(1); else if (e.target.classList.contains('m')) lvStep(-1); lvDraw(); };
+    rows.appendChild(r);
+  });
+  $('lvOk').onclick = () => lvConfirm();
+  $('lvAuto').onclick = () => { lvAutoP1(); lvDraw(); sfx.ui(); };
+  $('lvReset').onclick = () => { LV.add = lvZero(); LV.left = LV.total; lvDraw(); sfx.ui(); };
+  return el;
+}
+function lvStep(d) {
+  const k = LV_STATS[LV.sel].k;
+  if (d > 0 && LV.left > 0) { LV.add[k]++; LV.left--; sfx.ui(); }
+  else if (d < 0 && LV.add[k] > 0) { LV.add[k]--; LV.left++; sfx.ui(); }
+}
+function lvAutoP1() { const P1 = G.p1; let i = P1.lvI1 || 0; while (LV.left > 0) { const k = LV_AUTO[i++ % LV_AUTO.length]; LV.add[k]++; LV.left--; } P1.lvI1 = i; }
+function lvDraw() {
+  const P1 = G.p1;
+  $('lvLeft').textContent = LV.left;
+  [...$('lvRows').children].forEach((r, i) => {
+    const s = LV_STATS[i], cur = lvOf(P1, s.k), add = LV.add[s.k];
+    const eff = (v) => s.k === 'hp' ? `${100 + v * 3}` : `+${Math.min(s.cap || 1e9, v * s.per).toFixed(s.per % 1 ? 1 : 0)}${s.unit}`;
+    r.classList.toggle('on', i === LV.sel);
+    r.querySelector('.v').innerHTML = add ? `${eff(cur)} → <i>${eff(cur + add)}</i>` : eff(cur);
+  });
+}
+function lvOpen() {
+  lvBuild();
+  LV.total = LV.left = lvPoints(); LV.add = lvZero(); LV.sel = 0; LV.open = true;
+  $('lvTi').textContent = `LEVEL UP!  Lv.${G.lvN} → Lv.${G.lvN + 1}`;
+  $('lvSub').textContent = `${partyN() === 1 ? 'ひとりでクリア！' : partyN() === 3 ? '3 人でクリア！' : 'ふたりでクリア！'}　${LV.total} ポイントを、好きな能力に振り分けてください` + (partyN() > 1 ? '（相棒は自動で強くなります）' : '');
+  $('sclear').classList.add('hide'); LV.el.classList.remove('hide'); lvDraw(); sfx.lucky();
+}
+function lvConfirm() {
+  if (!LV.open) return;
+  if (LV.left > 0) lvAutoP1();
+  const P1 = G.p1; if (!P1.lv) P1.lv = lvZero();
+  for (const s of LV_STATS) P1.lv[s.k] += LV.add[s.k];
+  for (const h of heroes()) if (h !== P1) lvAuto(h, LV.total);
+  G.lvN++;
+  for (const h of heroes()) lvApply(h);
+  LV.open = false; LV.el.classList.add('hide'); sfx.total();
+  $('p1nm').textContent = `${P1.name} Lv.${G.lvN}`; if (G.p2) $('p2nm').textContent = `${G.p2.name} Lv.${G.lvN}`; partyOut();
+  tallyAdvance();
+}
+addEventListener('keydown', (e) => {
+  if (!LV.open) return;
+  const k = e.code;
+  if (k === 'ArrowUp' || k === 'KeyW') LV.sel = (LV.sel + LV_STATS.length - 1) % LV_STATS.length;
+  else if (k === 'ArrowDown' || k === 'KeyS') LV.sel = (LV.sel + 1) % LV_STATS.length;
+  else if (k === 'ArrowRight' || k === 'KeyD') lvStep(1);
+  else if (k === 'ArrowLeft' || k === 'KeyA') lvStep(-1);
+  else if (k === 'Enter' || k === 'Space' || k === 'KeyJ' || k === 'KeyZ') { e.preventDefault(); e.stopImmediatePropagation(); lvConfirm(); return; }
+  else return;
+  e.preventDefault(); e.stopImmediatePropagation(); lvDraw();
+}, true);
+// タイトル: 人数
+{
+  const row = $('partypick');
+  const sync = () => {
+    if (row) row.querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.n === G.party));
+    const p3 = $('p3pick'); if (p3) p3.style.display = G.party === 3 ? '' : 'none';
+  };
+  if (row) row.querySelectorAll('button').forEach(b => b.onclick = () => { G.party = +b.dataset.n; try { localStorage.setItem('brawl.party', G.party); } catch (e) {} sync(); ac(); sfx.ui(); });
+  sync();
+}
+// ゲームパッド: 十字キーで選んで振り分け、A で決定
+{
+  let prev = {};
+  const poll = () => {
+    requestAnimationFrame(poll);
+    if (!LV.open || !navigator.getGamepads) { prev = {}; return; }
+    const gp = [...navigator.getGamepads()].find(Boolean); if (!gp) return;
+    const ax = gp.axes || [], b = (i) => !!(gp.buttons[i] && gp.buttons[i].pressed);
+    const now = { u: b(12) || ax[1] < -.6, d: b(13) || ax[1] > .6, l: b(14) || ax[0] < -.6, r: b(15) || ax[0] > .6, ok: b(0) || b(9), auto: b(3) };
+    const e = (k) => now[k] && !prev[k];
+    if (e('u')) LV.sel = (LV.sel + LV_STATS.length - 1) % LV_STATS.length;
+    if (e('d')) LV.sel = (LV.sel + 1) % LV_STATS.length;
+    if (e('r')) lvStep(1);
+    if (e('l')) lvStep(-1);
+    if (e('auto')) lvAutoP1();
+    if (e('u') || e('d') || e('l') || e('r') || e('auto')) lvDraw();
+    prev = now;
+    if (e('ok')) lvConfirm();
+  };
+  requestAnimationFrame(poll);
+}
+if (Q.get('p3vrm')) G.p3Char = { name: Q.get('p3name') || 'テスト3', vrm: Q.get('p3vrm') };
 function prepClone() {
   if (G.cloneBody && G.cloneOf !== (G.p1Char && G.p1Char.vrm)) G.cloneBody = null;   // キャラを替えたら、分身も作り直す
   if (G.cloneBody || G.cloneJob || !G.p1Char || !G.p1Char.vrm) return;
@@ -6654,7 +6862,7 @@ function prepClone() {
 function takeClone() { const b = G.cloneBody; G.cloneBody = null; if (b) b.root.visible = true; return b; }
 function spawnEnemy(type, fromLeft) {
   const spec = ENEMIES[type];
-  const hpMul = (G.p2 && !G.p2.out ? 1.25 : 1) * [0.8, 1, 1.2][G.diff];
+  const hpMul = (G.mode === 'coop' ? [1, 1.25, 1.45][G.party - 1] : 1) * [0.8, 1, 1.2][G.diff];
   const e = new Fighter({ name: spec.name, team: 'enemy', spec, body: (spec.clone && (G.cloneLive = takeClone())) || new BotBody(spec, false), maxhp: Math.round(spec.hp * hpMul), spd: spec.spd,
     ai: { think: rnd(.3, .9), zoff: rnd(-1.4, 1.4), enterT: 1.1 } });
   e.hp = e.maxhp;
@@ -6723,7 +6931,7 @@ function areaLogic(dt) {
     const live = enemies().filter(e => e.state !== 'dead');
     const wave = G.area.waves[G.waveIdx], midT = wave && wave.find(t => ENEMIES[t].mid);
     if (wave && live.length <= (midT ? 0 : 1) && G.waveT <= 0) {
-      wave.forEach((t, i) => spawnEnemy(t, !ENEMIES[t].boss && !ENEMIES[t].mid && (i % 2 === 1 || Math.random() < .25)));
+      partyWave(wave).forEach((t, i) => spawnEnemy(t, !ENEMIES[t].boss && !ENEMIES[t].mid && (i % 2 === 1 || Math.random() < .25)));
       G.waveIdx++; G.waveT = 1.2;
       if (midT) { banner('WARNING', '中ボス ' + ENEMIES[midT].name + ' 登場！'); sfx.warn(); setTimeout(() => say('boss', 2), 1200); G.waveT = 1.8; }   // 中ボスの波
     }
@@ -6732,7 +6940,7 @@ function areaLogic(dt) {
     if (G.area.boss) {   // ボスがいる間はときどき子分が来る
       const boss = enemies().find(e => e.spec.boss);
       G.minionT -= dt;
-      if (boss && boss.state !== 'dead' && G.minionT <= 0 && live.length < 3) { spawnEnemy(pick(STAGES[G.stage].minions), Math.random() < .5); G.minionT = 11; }
+      if (boss && boss.state !== 'dead' && G.minionT <= 0 && live.length < (G.mode === 'coop' ? [2, 3, 4][G.party - 1] : 3)) { spawnEnemy(pick(STAGES[G.stage].minions), Math.random() < .5); G.minionT = 11; }
       if (boss) { G.focus = boss; G.focusT = 1; }
     }
     if (G.waveIdx >= G.area.waves.length && live.length === 0 && G.waveT <= 0) {
@@ -6792,6 +7000,7 @@ function enterStage(i, first) {
     h.x = k ? -4 : -2.5; h.z = k ? -1 : .2;
     if (G.heroProf?.ent.intro) { h.state = 'intro'; h.inv = 1; }   // 登場の決めポーズ（動かせばすぐ解ける）
   });
+  partyStage();
   G.score0 = [p1.score, p2.score];
   for (const [x, z, d] of PROPS_AT) makeProp(x, z, d);
   cineCancel(); buildGimmicks(S); G.deaths = 0; G.aeon = 0; p1.deaths = p2.deaths = 0;
@@ -6820,26 +7029,28 @@ const fmt = (n) => Math.round(n).toLocaleString('en-US');
 function showTally() {
   const P1 = G.p1, P2 = G.p2, S = STAGES[G.stage], last = G.stage >= STAGES.length - 1;
   const t = G.time, mm = Math.floor(t / 60), ss = Math.floor(t % 60);
-  const k1 = P1.score - G.score0[0], k2 = P2.score - G.score0[1];
+  const P3 = G.p3, pn = partyN();
+  const k1 = P1.score - G.score0[0], k2 = pn === 1 ? 0 : P2.score - G.score0[1], k3 = P3 ? P3.score - (G.score3 || 0) : 0;
   const timeB = Math.max(0, Math.round(S.par * 1.6 - t)) * 20;
   const comboB = Math.min(G.maxCombo, 150) * 100;
   const hs = heroes().filter(h => !h.out), dn = G.deaths || 0;
   const lifeB = Math.round(hs.reduce((s, h) => s + h.hp / h.maxhp * 1000, 0) / 10) * 10;
   const contB = dn === 0 ? 5000 : Math.max(0, 2000 - dn * 400);
-  const bonus = timeB + comboB + lifeB + contB;
-  P1.score += Math.ceil(bonus / 2); P2.score += Math.floor(bonus / 2);   // ボーナスはふたりで山分け
-  const rp = (dn === 0 ? 2 : dn <= 3 ? 1 : 0) + (t < S.par ? 2 : t < S.par * 1.3 ? 1 : 0) + (G.maxCombo >= 30 ? 2 : G.maxCombo >= 15 ? 1 : 0) + (hs.length === 2 ? 1 : 0);
+  const base = timeB + comboB + lifeB + contB, bonus = Math.round(base * 2 / pn / 10) * 10, partyB = bonus - base;   // ひとりは 2 倍、3 人はひとりの 3 分の 1
+  if (pn === 1) P1.score += bonus; else if (pn === 2) { P1.score += Math.ceil(bonus / 2); P2.score += Math.floor(bonus / 2); } else { const s3 = Math.floor(bonus / 3); P1.score += bonus - s3 * 2; P2.score += s3; P3.score += s3; }   // ボーナスは山分け
+  const rp = (dn === 0 ? 2 : dn <= 3 ? 1 : 0) + (t < S.par ? 2 : t < S.par * 1.3 ? 1 : 0) + (G.maxCombo >= 30 ? 2 : G.maxCombo >= 15 ? 1 : 0) + (hs.length >= pn ? 1 : 0);
   const rank = rp >= 6 ? 'S' : rp >= 4 ? 'A' : rp >= 2 ? 'B' : 'C';
   const rows = [
-    ['撃破スコア', `${P1.name} ${fmt(k1)} ／ ${P2.name} ${fmt(k2)}`, k1 + k2],
+    ['撃破スコア', pn === 1 ? `${P1.name} ${fmt(k1)}` : `${P1.name} ${fmt(k1)} ／ ${P2.name} ${fmt(k2)}` + (P3 ? ` ／ ${P3.name} ${fmt(k3)}` : ''), k1 + k2 + k3],
     ['タイムボーナス', `${G.aeon ? '5億年と ' : ''}${mm}:${String(ss).padStart(2, '0')}`, timeB],
     ['最大コンボ', `${G.maxCombo} HIT`, comboB],
     ['のこり体力', `${P1.name} ${Math.round(P1.hp / P1.maxhp * 100)}% ／ ${P2.name} ${Math.round(P2.hp / P2.maxhp * 100)}%`, lifeB],
     ['やられた回数', dn ? `${dn} 回（コンティニューは無料）` : 'ノーミス！', contB],
   ];
+  if (pn !== 2) rows.push(['人数', pn === 1 ? 'ひとりでクリア  ボーナス ×2' : '3 人でクリア  ボーナス ×2/3', partyB]);
   $('scSt').textContent = `STAGE ${G.stage + 1} ― ${S.name}`;
   $('scTi').innerHTML = [...(last ? 'ALL CLEAR!!' : 'STAGE CLEAR!')].map((ch, i) => ch === ' ' ? '<i></i>' : `<span style="--i:${i}">${ch}</span>`).join('');
-  $('scSub').textContent = `${last ? '5億年を 乗りこえた！（手取り −403円・記憶なし）' : S.clear}　${P1.name} ＆ ${P2.name}（Claude）`;
+  $('scSub').textContent = `${last ? '5億年を 乗りこえた！（手取り −403円・記憶なし）' : S.clear}　` + (pn === 1 ? `${P1.name}（ひとりで）` : `${P1.name} ＆ ${P2.name}（Claude）` + (P3 ? ` ＆ ${P3.name}` : ''));
   const box = $('scRows'); box.textContent = '';
   const els = rows.map((r) => {
     const d = document.createElement('div'); d.className = 'sc-row';
@@ -6847,12 +7058,12 @@ function showTally() {
     box.appendChild(d); return d;
   });
   $('scTot').classList.remove('on'); $('scTotV').textContent = '0'; $('scAll').classList.remove('on');
-  $('scAll').textContent = G.stage > 0 || last ? `ここまでの合計  ${fmt(P1.score + P2.score)}` : '';
+  $('scAll').textContent = G.stage > 0 || last ? `ここまでの合計  ${fmt(P1.score + P2.score + (P3 ? P3.score : 0))}` : '';
   const rk = $('scRank'); rk.classList.remove('on'); rk.dataset.r = rank; rk.querySelector('b').textContent = rank;
   $('scBtns').classList.remove('on'); $('scNext').textContent = last ? 'もう一回 押す' : `STAGE ${G.stage + 2} へ ▶`;
   $('scHint').textContent = last ? 'Enter / J で もう一回 5億年　　Esc でタイトルへ' : 'Enter / J で次の面へ';
   $('hud').classList.remove('on'); $('bubble').classList.remove('on'); $('sclear').classList.remove('hide'); tallyFit();
-  G.tally = { t: 0, rows: rows.map((r, i) => ({ val: r[2], el: els[i], v: els[i].lastChild, on: false, fin: false, plus: i > 0 })), total: k1 + k2 + bonus, rank, last, tick: 0, totOn: false, totFin: false, rankOn: false, done: false };
+  G.tally = { t: 0, rows: rows.map((r, i) => ({ val: r[2], el: els[i], v: els[i].lastChild, on: false, fin: false, plus: i > 0 && r[2] >= 0 })), total: k1 + k2 + k3 + bonus, rank, last, tick: 0, totOn: false, totFin: false, rankOn: false, done: false };
   log(`stage clear ${G.stage + 1} time=${Math.round(t)} kill=${k1 + k2} bonus=${bonus} total=${P1.score + P2.score} rank=${rank}`);
 }
 function tallyTick(dt) {
@@ -6877,6 +7088,7 @@ function tallyTick(dt) {
 }
 // Enter / J / パッドのボタン: 数え上げの途中なら一気に最後まで、終わっていれば次へ
 function tallyKey() {
+  if (LV.open) return;
   const Tl = G.tally; if (!Tl || G.phase !== 'tally' || Tl.t < .8) return;
   if (!Tl.done) { Tl.t = 99; return; }
   tallyAdvance();
@@ -6888,6 +7100,8 @@ function tallyClose() { $('sclear').classList.add('hide'); G.tally = null; }
 function tallyAdvance() {
   const Tl = G.tally; if (!Tl || !Tl.done || G.phase !== 'tally') return;
   if (Tl.last) { tallyClose(); startGame(); return; }
+  if (LV.open) { lvConfirm(); return; }
+  if (G.mode === 'coop' && !Tl.lvDone) { Tl.lvDone = true; lvOpen(); return; }   // レベルアップ（振り分け）
   G.phase = 'fade'; $('fade').classList.add('on'); sfx.ui();
   setTimeout(() => {
     tallyClose(); enterStage(G.stage + 1); $('hud').classList.add('on'); G.phase = 'play'; pressed.clear();
@@ -6910,7 +7124,7 @@ function continueGame() {
     h.state = 'jump'; h.t = 0; h.jk = true; h.y = 4; h.vy = 0; h.vx = 0; h.move = null; h.victim = null; h.holder = null;
     h.x = G.camX - halfW * .4 + (h.isClaude ? -1 : 0); h.z = h.isClaude ? -.8 : .3; h.inv = 2.6; h.face = 1;
   }
-  pressed.clear(); G.continues++;
+  partyOut(); pressed.clear(); G.continues++;
   G.phase = 'play';
   banner('CONTINUE', 'もう一度、Claude と！'); sfx.start();
 }
@@ -6965,7 +7179,7 @@ function setBar(el, f) {
 }
 function updateHUD(dt) {
   const P1 = G.p1, P2 = G.p2; if (!P1) return;
-  setBar($('p1bar'), P1); setBar($('p2bar'), P2);
+  setBar($('p1bar'), P1); setBar($('p2bar'), P2); if (G.p3 && $('p3bar')) setBar($('p3bar'), G.p3);
   comboTick(dt);
   const lv = (f) => G.mode === 'vs' ? '' : '∞' + (f.deaths ? ` ${f.deaths}回` : '') + (f.isPlayer ? ((f.meter || 0) >= METER_MAX ? '　Y 超必殺!' : (f.meter || 0) >= 100 ? '　H 連携技' : '') : '');
   for (const [id, f] of [['p1mt', P1], ['p2mt', P2]]) { const el = $(id); if (!el) continue; el.style.display = G.mode === 'vs' ? 'none' : ''; const m = f.meter || 0; [...el.children].forEach((b, i) => { const k = clamp((m - i * 100) / 100, 0, 1); b.firstChild.style.width = (k * 100) + '%'; b.classList.toggle('full', k >= 1); }); el.classList.toggle('max', m >= METER_MAX); }
@@ -7011,9 +7225,10 @@ function sim(dt) {
   if (G.phase === 'ending' || G.phase === 'tally' || (G.mode === 'vs' && G.roundOver)) { P1.ctrl = { mx: 0, mz: 0, atk: false, jump: false, sp: false }; }
   else P1.ctrl = inp;
   if (P2.alive && !P2.out) { if (G.phase === 'ending' || G.phase === 'tally' || (G.mode === 'vs' && G.roundOver)) P2.ctrl = { mx: 0, mz: 0, atk: false, jump: false, sp: false }; else aiClaude(P2, dt); }
+  const P3 = G.p3; if (P3 && P3.alive && !P3.out) { if (G.phase === 'ending' || G.phase === 'tally') P3.ctrl = { mx: 0, mz: 0, atk: false, jump: false, sp: false }; else aiClaude(P3, dt); }
   // 殴りに来る敵は同時に 2〜3 体まで（残りは周りをうろつく）
   const es = enemies().filter(e => e.state !== 'dead');
-  const maxEng = G.diff === 2 ? 3 : 2;
+  const maxEng = (G.diff === 2 ? 3 : 2) + (G.mode === 'coop' && G.party === 3 ? 1 : 0);
   engaged = new Set(es.filter(e => e.spec.boss || e.spec.mid));
   es.filter(e => !e.spec.boss && !e.spec.mid).map(e => { const h = nearestHero(e); return [e, h ? Math.abs(h.x - e.x) + Math.abs(h.z - e.z) : 99]; })
     .sort((a, b) => a[1] - b[1]).slice(0, maxEng).forEach(([e]) => engaged.add(e));
@@ -7311,6 +7526,8 @@ function buildPickers() {
   };
   mk('p1pick', G.p1Char, (c) => { G.p1Char = c; });
   mk('p2pick', G.claudeChar, (c) => { G.claudeChar = c; });
+  if (!G.p3Char) G.p3Char = list.find(c => c !== G.p1Char && c !== G.claudeChar) || null;
+  if ($('p3pick')) mk('p3pick', G.p3Char, (c) => { G.p3Char = c; });
 }
 document.querySelectorAll('.mode').forEach(b => b.onclick = () => { document.querySelectorAll('.mode').forEach(x => x.classList.remove('on')); b.classList.add('on'); G.mode = b.dataset.mode; ac(); sfx.ui(); });
 for (const [row, key] of [['s1pick', 'p1Style'], ['s2pick', 'p2Style']]) {
