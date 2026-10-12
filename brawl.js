@@ -1648,7 +1648,7 @@ const STAGES = [
   { name: '5億年商店街', theme: 'street', intro: 'Claude と協力して進め！', clear: '5億年商店街を取り戻した！', par: 320, minions: ['grunt', 'speedy', 'boxer', 'rookie'],
     areas: [
       { lock: 8,  waves: [['grunt', 'sleeper'], ['grunt', 'speedy', 'boxer']] },
-      { lock: 27, waves: [['grunt', 'knife', 'boxer'], ['mid1', 'grunt']] },                          // 中ボス 1
+      { lock: 27, waves: [['grunt', 'poleman', 'boxer'], ['mid1', 'grunt']] },                          // 中ボス 1
       { lock: 46, waves: [['heavy', 'gunner', 'grunt'], ['rookie', 'boxer', 'knife', 'gunner']] },
       { lock: 63, waves: [['knife', 'guardman', 'boxer'], ['mid2', 'speedy']] },                         // 中ボス 2
       { lock: 80, boss: 1, waves: [['boss', 'grunt']] },                                              // 大ボス
@@ -1662,9 +1662,9 @@ const STAGES = [
   { name: '5億年ボタン工場', theme: 'factory', intro: 'いちばん奥の巨大ボタンをめざせ！', clear: '5億年ボタン工場を止めた！', par: 360, minions: ['guard', 'spark', 'jet'],
     areas: [
       { lock: 8,  waves: [['guard', 'sleeper', 'jet'], ['welder', 'guardman', 'guard']] },
-      { lock: 27, waves: [['press', 'witch', 'spark'], ['esper', 'guard']] },                         // 中ボス 1（超能力者）
+      { lock: 27, waves: [['press', 'koji', 'spark'], ['esper', 'guard']] },                         // 中ボス 1（超能力者）
       { lock: 46, waves: [['brute', 'jet', 'guardman'], ['witch', 'rocket', 'rookie', 'guard']] },
-      { lock: 63, waves: [['brute', 'welder', 'witch'], ['mid4', 'jet']] },                         // 中ボス 2
+      { lock: 63, waves: [['koji', 'welder', 'archer'], ['mid4', 'jet']] },                         // 中ボス 2
       { lock: 80, boss: 1, waves: [['boss2', 'guard']] },                                             // 大ボス
     ],
     armed: .28, eweapons: ['pipe', 'pipe', 'stick'],
@@ -2583,8 +2583,8 @@ function resolveHits() {
     const aw = a.weapon ? WEAPONS[a.weapon.kind] : null; let hitNow = false;
     if (aw) {
       if (m.weapon && aw.dmg) {
-        const i = m.key === 'wsw1' ? 0 : m.key === 'wsw2' ? 1 : 2;
-        mm = { ...mm, dmg: aw.dmg[i], reach: aw.reach, wk: a.weapon.kind };
+        const i = m.wi != null ? m.wi : m.key === 'wsw1' ? 0 : m.key === 'wsw2' ? 1 : 2;
+        mm = { ...mm, dmg: aw.dmg[i] * (m.key === 'wgs2' ? .65 : 1), reach: aw.reach + (m.wcls === 'sp' ? .3 : 0), wk: a.weapon.kind };   // 突きの型は少し遠くまで / 二度斬りは 1 発ぶんを軽く
         if (aw.bash) { mm.knock = 1; mm.kb = Math.max(mm.kb || 0, 5); mm.heavy = 1; }
         if (aw.homer && i === 2) { mm.kb = 11; mm.launch = 8.5; mm.homer = 1; }
       } else if (aw.mul && KNUCKLE_MOVES.has(m.key)) mm = { ...mm, dmg: mm.dmg * aw.mul, wk: 'knuckle' };
@@ -2636,7 +2636,8 @@ function spawnShot(f, s) {
   const n = s.spread || 1;
   for (let i = 0; i < n; i++) spawnShot1(f, s, n > 1 ? (i - (n - 1) / 2) * 1.35 : 0);
   const x = f.x + f.face * .75, y = (f.y || 0) + 1.05 * Math.min(1.4, f.scl);
-  if (s.kind === 'bullet') { sfx.gun(); flashFx(x, y + .1, f.z + .1, .9, COL.gold, .07, .7); }
+  if (s.kind === 'arrow') sfx.swing(1, true);
+  else if (s.kind === 'bullet') { sfx.gun(); flashFx(x, y + .1, f.z + .1, .9, COL.gold, .07, .7); }
   else if (s.kind === 'rocket') { sfx.rocket(); flashFx(x, y + .3, f.z + .1, 1.6, COL.orange, .14, .6); for (let i = 0; i < 8; i++) smoke.add(f.x - f.face * .3, y + .3, f.z, -f.face * rnd(1, 3), rnd(-.3, .6), rnd(-.4, .4), rnd(.5, .9), .25, .9, COL.smoke[0], COL.smoke[1], COL.smoke[2], .3, -.2, 2); }
   else if (s.kind === 'orb' || s.kind === 'wave') { sfx.cast(); fxShot(f, x, y, f.z, s.kind === 'wave' ? [.62, .48, 1] : [1, .5, .9], s.kind === 'wave'); }
   else if (s.kind === 'glyph') sfx.swing(2);
@@ -2649,7 +2650,12 @@ function spawnShot1(f, s, vz) {
   const g = new T.Group(); let ring = null, spr = null;
   const glowS = (sz, op = 1) => { const sp = new T.Sprite(new T.SpriteMaterial({ map: radialTex, color: col, transparent: true, opacity: op, depthWrite: false, blending: T.AdditiveBlending })); sp.scale.set(sz, sz, 1); g.add(sp); return sp; };
   let sc = (s.sc || (s.big ? 1.7 : 1)) * (f.team === 'enemy' ? Math.min(1.5, Math.sqrt(f.scl)) : 1), r = .3 * sc, yk = 1.05;
-  if (kind === 'bullet') { g.add(new T.Mesh(new T.BoxGeometry(.36, .05, .05), new T.MeshBasicMaterial({ color: 0xfff6c8 }))); glowS(.5, .8); sc = 1; r = .14; yk = 1.12; }
+  if (kind === 'arrow') {   // 矢: 軸・やじり・羽
+    const L2 = (c) => new T.MeshLambertMaterial({ color: c }); const sh = new T.Mesh(new T.BoxGeometry(.7, .022, .022), L2(0xb08850)); g.add(sh);
+    const hd = new T.Mesh(new T.ConeGeometry(.04, .13, 6), L2(0xd8dce8)); hd.rotation.z = -Math.PI / 2 * f.face; hd.position.x = f.face * .4; g.add(hd);
+    for (const k of [-1, 1]) { const fl = new T.Mesh(new T.BoxGeometry(.14, .06, .01), L2(0xff4a5a)); fl.position.set(-f.face * .3, k * .03, 0); g.add(fl); }
+    sc = 1; r = .15; yk = 1.32;
+  } else if (kind === 'bullet') { g.add(new T.Mesh(new T.BoxGeometry(.36, .05, .05), new T.MeshBasicMaterial({ color: 0xfff6c8 }))); glowS(.5, .8); sc = 1; r = .14; yk = 1.12; }
   else if (kind === 'rocket') {
     const body = new T.Mesh(new T.CylinderGeometry(.08, .08, .5, 10), new T.MeshLambertMaterial({ color: 0xc9ced8 })); body.rotation.z = Math.PI / 2; g.add(body);
     const nose = new T.Mesh(new T.ConeGeometry(.085, .2, 10), new T.MeshLambertMaterial({ color: 0xff3d3d })); nose.rotation.z = -Math.PI / 2 * f.face; nose.position.x = f.face * .34; g.add(nose);
@@ -2668,7 +2674,7 @@ function spawnShot1(f, s, vz) {
   }
   const x = f.x + f.face * .75, y = (f.y || 0) + yk * Math.min(1.4, f.scl);
   g.position.set(x, y, f.z); scene.add(g);
-  const sh = { g, ring, spr, x, y, z: f.z, vx: f.face * s.spd, vz, owner: f, team: f.team, s, t: 0, r, c, sc, kind, life: kind === 'bullet' ? .9 : kind === 'rocket' ? 1.5 : 1.6 };
+  const sh = { g, ring, spr, x, y, z: f.z, vx: f.face * s.spd, vz, owner: f, team: f.team, s, t: 0, r, c, sc, kind, life: kind === 'bullet' ? .9 : kind === 'arrow' ? 1.3 : kind === 'rocket' ? 1.5 : 1.6 };
   shots.push(sh); if (kind === 'ki' || kind === 'orb' || kind === 'wave') kiAim(sh, f);
 }
 // ロケットなどの爆発: まわりの相手をまとめて吹っ飛ばす
@@ -2847,7 +2853,7 @@ function updateFighter(f, dt) {
     }
     else if (c.jump) { f.state = 'jump'; f.t = 0; f.vy = JUMP_V; f.jk = false; f.vx = mx * f.spd * (f.fast && hero ? RUN_MUL * .9 : 1.15); f.vz = mz * f.spd * .4; sfx.jump(); fxJump(f); }
     else if (c.atk && hero && (!f.weapon || f.weapon.kind === 'knuckle') && G.mode === 'coop' && pickWeapon(f)) { f.state = 'idle'; f.vx = f.vz = 0; }   // 足もとの武器を拾う（メリケンサックは、はずして持ちかえる）
-    else if (c.atk && hero && armed(f)) startMove(f, f.fast ? 'wsw3' : (f.comboT > 0 && f.comboNext && MOVES[f.comboNext]?.weapon) ? f.comboNext : 'wsw1');   // 武器で殴る
+    else if (c.atk && hero && armed(f)) startMove(f, f.fast ? wKey(f, 3) : (f.comboT > 0 && f.comboNext && MOVES[f.comboNext]?.weapon && MOVES[f.comboNext].wcls === MOVES[wKey(f, 1)].wcls) ? f.comboNext : wKey(f, 1));   // 武器で殴る
     else if (c.atk) startMove(f, hero && f.fast ? 'dashatk' : (f.comboT > 0 && f.comboNext) ? comboNext(f, f.comboNext) : (f.firstMove || 'jab1'));
     else if (Math.abs(mx) > .5 && hero && !f.fast && !armed(f)) tryGrab(f);
   } else if (f.move && S === f.move.key && !f.move.air) {
@@ -3014,6 +3020,7 @@ function aiEnemy(e, dt, engaged) {
   const c = e.ctrl; c.atk = c.jump = c.sp = false; c.mx = c.mz = 0;
   const A = e.ai; A.think -= dt;
   A.guardT = (A.guardT || 0) - dt; c.guard = A.guardT > 0;
+  aiWpn(e, dt);
   if (aiUpg(e, dt)) return;   // 感情（居眠り・笑う・おびえる）
   if (e.state === 'jump' && A.autoKick && e.t > .2) { c.atk = true; A.autoKick = false; }
   if (e.state !== 'idle' && e.state !== 'walk') return;
@@ -3218,7 +3225,15 @@ function weaponMesh(kind) {
   const g = new T.Group(), L = (c, e = 0) => new T.MeshLambertMaterial({ color: c, emissive: e });
   const cyl = (rb, rt, h, m, y) => { const me = new T.Mesh(new T.CylinderGeometry(rt, rb, h, 10), m); me.position.y = y; g.add(me); return me; };
   const box = (w, h, d, m, x, y, z) => { const me = new T.Mesh(new T.BoxGeometry(w, h, d), m); me.position.set(x, y, z); g.add(me); return me; };
-  if (kind === 'drum') { const m = L(0xd0551c), b = L(0xffce4a); cyl(.33, .33, .9, m, 0); cyl(.345, .345, .1, b, .28); cyl(.345, .345, .1, b, -.28); cyl(.3, .3, .92, L(0x8a3510), 0); }
+  if (kind === 'pole') {   // 物干し竿（靴下とタオルが干してある）
+    cyl(.022, .022, 1.95, L(0xc8d0dc, 0x14161c), .9); cyl(.026, .026, .05, L(0x4a5060), 1.88); cyl(.026, .026, .05, L(0x4a5060), -.08);
+    box(.09, .17, .025, L(0xff6a9a), .07, 1.55, 0); box(.05, .06, .025, L(0xff6a9a), .1, 1.45, 0); box(.2, .14, .015, L(0x7fd0ff), -.05, 1.15, 0);
+  } else if (kind === 'sledge') {   // 工事用ハンマー
+    cyl(.03, .03, .95, L(0x8a5a2b), .42); box(.38, .19, .19, L(0x5a5f6a, 0x10121a), 0, .93, 0); box(.392, .05, .2, L(0xffce1a, 0x3a2a00), 0, .93, 0);
+  } else if (kind === 'bokuto') {   // お土産の木刀
+    box(.05, .82, .026, L(0xb07a44), 0, .62, 0); box(.04, .1, .022, L(0xb07a44), 0, 1.06, 0); cyl(.07, .07, .025, L(0x1a1a1a), .19); cyl(.024, .024, .26, L(0x5a3418), .05);
+    box(.02, .5, .028, L(0x2a1a10), 0, .62, 0);   // 焼き印の「洞爺湖」（のつもり）
+  } else if (kind === 'drum') { const m = L(0xd0551c), b = L(0xffce4a); cyl(.33, .33, .9, m, 0); cyl(.345, .345, .1, b, .28); cyl(.345, .345, .1, b, -.28); cyl(.3, .3, .92, L(0x8a3510), 0); }
   else if (kind === 'stick') { cyl(.034, .028, 1.25, L(0x8a5a2b), .505); cyl(.033, .033, .1, L(0xc9a36a), 1.08); }
   else if (kind === 'bat') { cyl(.046, .046, .03, L(0x3a2a1c), -.1); cyl(.026, .026, .3, L(0x3a2a1c), .05); cyl(.028, .07, .62, L(0xd9b27a), .51); const top = new T.Mesh(new T.SphereGeometry(.07, 10, 6), L(0xd9b27a)); top.position.y = .82; g.add(top); }
   else if (kind === 'pipe') { const m = L(0x9aa3b5, 0x1a1d26), j = L(0x6a7285); cyl(.04, .04, 1.3, m, .51); box(.13, .1, .13, j, 0, 1.16, 0); box(.2, .075, .09, j, .08, 1.16, 0); box(.1, .06, .1, j, 0, -.12, 0); }
@@ -3268,7 +3283,7 @@ function nearWeapon(f, rx = .8, rz = .5) {
 function pickWeapon(f) {
   const w = nearWeapon(f); if (!w) return false;
   if (f.weapon) dropWeapon(f, -f.face);   // 持っていたものは、後ろへ置く
-  killWeapon(w); holdWeapon(f, w.kind, w.uses);
+  killWeapon(w); holdWeapon(f, w.kind, w.uses); wclsHint(f);
   sfx.wpick(); toastAt(f, WEAPONS[w.kind].name + ' を拾った！'); ringFx(f.x, .05, f.z, .2, 1.3, .3, COL.gold, 'ground'); pillarFx(f.x, f.z, .3, 1.8, .3, COL.gold, .2);
   f.comboNext = null; f.comboT = 0; f.cool = .1;
   if (f.isClaude && Math.random() < .6) say('weapon', 1);
@@ -3378,7 +3393,7 @@ function weaponSync(f, dt, freeze) {
   const m = f.move, S = f.state, L = (a, b, k) => a + (b - a) * k;
   let th = .45, ph = 0, snap = false, scripted = false;   // th = まっすぐ上から前へ倒す角度 / ph = 手前へ回す角度
   const human = !!body.vrm;   // VRM のキャラは、武器の技のあいだだけ向きを決める。ロボ（手が箱）は、いつも決めた向き
-  if (m && S === m.key && !m.air && m.a[0] < 5 && (!human || m.weapon)) {
+  if (m && S === m.key && !m.air && m.a[0] < 5 && (!human || (m.weapon && !m.wcls))) {   // 型の技は、モーションの握りのまま
     scripted = true;
     const a0 = m.a[0], a1 = m.a[1], t = f.t, side = m.key === 'wsw2';
     if (t < a0) { const k = clamp(t / Math.max(.04, a0), 0, 1); th = side ? 1.45 : L(.45, -1.3, k); ph = side ? L(.3, 2.0, k) : 0; snap = k > .5; }
@@ -5689,8 +5704,8 @@ STAGES.push(
   { name: '5億年駅', theme: 'station', intro: '電車から敵が降りてくる。黄色い線の内側で戦え！', clear: '5億年駅を 定刻で発車した！', par: 400, minions: ['commuter', 'rusher', 'ninja'],
     areas: [
       { lock: 8,  waves: [['commuter', 'sleeper', 'rusher'], ['commuter', 'bento', 'ninja']] },
-      { lock: 27, waves: [['drunk', 'rusher', 'sniper'], ['mid5', 'commuter']] },                        // 中ボス 1（駆け込み乗車の常習）
-      { lock: 46, waves: [['ninja', 'bento', 'commuter', 'rusher'], ['drunk', 'sniper', 'ninja', 'bento']] },
+      { lock: 27, waves: [['drunk', 'shugaku', 'xbow'], ['mid5', 'commuter']] },                        // 中ボス 1（駆け込み乗車の常習）
+      { lock: 46, waves: [['ninja', 'bento', 'commuter', 'rusher'], ['shugaku', 'sniper', 'archer', 'bento']] },
       { lock: 63, waves: [['drunk', 'rusher', 'sniper'], ['mid6', 'ninja']] },                           // 中ボス 2（キセル忍者）
       { lock: 80, boss: 1, waves: [['boss3', 'commuter']] },                                             // 大ボス（ダイヤの乱れ）
     ],
@@ -5701,9 +5716,9 @@ STAGES.push(
     gimSkin: { vendY: 0, truckText: '駅弁 5億円', truckShout: 'べんと〜!', truckCol: 0xc8402a } },
   { name: '5億年ランド', theme: 'park', intro: '閉園後の遊園地。踊っているやつは、だいたい敵！', clear: '5億年ランドを 閉園させた！', par: 480, minions: ['dancer', 'balloon', 'zombie'],
     areas: [
-      { lock: 8,  waves: [['dancer', 'dancer', 'balloon'], ['clown', 'zombie', 'dancer']] },
+      { lock: 8,  waves: [['dancer', 'dancer', 'balloon'], ['clown', 'poleman', 'dancer']] },
       { lock: 27, waves: [['mascot', 'fairy', 'balloon'], ['mid7', 'zombie']] },                         // 中ボス 1（着ぐるみの本体）
-      { lock: 46, waves: [['zombie', 'zombie', 'clown', 'fairy'], ['mascot', 'dancer', 'balloon', 'clown']] },
+      { lock: 46, waves: [['zombie', 'koji', 'clown', 'archer'], ['mascot', 'dancer', 'balloon', 'clown']] },
       { lock: 63, waves: [['fairy', 'dancer', 'zombie', 'balloon'], ['mid8', 'dancer', 'dancer']] },     // 中ボス 2（絶叫担当）
       { lock: 80, boss: 1, waves: [['boss4', 'dancer', 'dancer']] },                                     // 大ボス（永遠のアイドル）
     ],
@@ -5715,7 +5730,7 @@ STAGES.push(
     gimSkin: { truckText: '絶叫コースター', truckShout: 'キャーー!', truckCol: 0xd03a8a } },
   { name: '何もない空間', theme: 'void', intro: 'ボタンを押した先。何もない。敵は、自分の気持ち。', clear: '5億年を 乗りこえた！　100万円 ゲット！', par: 520, minions: ['memory', 'lonely', 'yawn'],
     areas: [
-      { lock: 8,  waves: [['bored', 'memory', 'memory'], ['lonely', 'counter', 'bored']] },
+      { lock: 8,  waves: [['bored', 'memory', 'shugaku'], ['lonely', 'xbow', 'bored']] },
       { lock: 27, waves: [['regret', 'yawn', 'lonely'], ['mid9', 'memory']] },                           // 中ボス 1（数えるのをやめた人）
       { lock: 46, waves: [['lonely', 'lonely', 'counter', 'yawn'], ['regret', 'bored', 'memory', 'counter'], ['yawn', 'yawn', 'lonely', 'bored']] },
       { lock: 63, waves: [['regret', 'counter', 'lonely', 'yawn'], ['mid10', 'bored']] },                // 中ボス 2（悟り・未遂）
@@ -6414,6 +6429,125 @@ function grenBoom(h) {
   for (let n = 0; n < 9; n++) smoke.add(h.x + rnd(-.4, .4), .3, h.z + rnd(-.2, .2), rnd(-1.2, 1.2), rnd(.6, 1.6), rnd(-.3, .3), rnd(.6, 1.1), .35, 1.2, .42, .4, .38, .6);
   textFx(h.x, 1.4, h.z, 'ドカーン!', COL.orange, 2.0, .7);
 }
+// =========================================================================================
+// 2026-10-13 (2): 武器のモーション（槍・ハンマー・両手剣・片手剣・弓・クロスボウ）で、遊びを増やす
+//   ① 味方の強化「武器の型」: 拾った武器の種類で、技そのものが変わる
+//        突き（棒・傘・物干し竿）/ 叩きつけ（バット・ピコピコハンマー・工事用ハンマー）/ 斬り（鉄棒・時計の針・お土産の木刀）
+//   ② 新しい敵 5 人。武器を持った敵は、倒すとその武器を落とす → 拾うと、その型で戦える
+//        物干し竿の人 / 工事中のまま5億年 / 木刀を買った修学旅行生 / エアで弓を引く弓道部 / 装填に5億年かかる狙撃手
+// =========================================================================================
+Object.assign(DEFAULT_SETS, { spear: './motions/brawl/spear', hammer: './motions/brawl/hammer', great: './motions/brawl/great', sword: './motions/brawl/sword', archer: './motions/brawl/archer', xbow: './motions/brawl/xbow' });
+
+// ---- 新しい武器（敵が持ってくる。倒すと落とす）----
+Object.assign(WEAPONS, {
+  pole:   { name: '物干し竿',       dmg: [10, 11, 17], reach: 1.95, uses: 12, thr: 12, len: 1.9,  snd: 'pipe', word: 'metal', col: 0xc8d0dc },   // とにかく長い
+  sledge: { name: '工事用ハンマー', dmg: [14, 15, 27], reach: 1.5,  uses: 10, thr: 18, len: 1.0,  snd: 'pipe', word: 'metal', col: 0xe0a020 },   // 重くて痛い
+  bokuto: { name: 'お土産の木刀',   dmg: [11, 12, 20], reach: 1.6,  uses: 14, thr: 12, len: 1.0,  snd: 'wood', word: 'wood', col: 0x9a6a3a },
+});
+// 武器の型: sp = 突き / hm = 叩きつけ / gs = 斬り
+const WCLS = { stick: 'sp', umbrella: 'sp', pole: 'sp', bat: 'hm', mallet: 'hm', sledge: 'hm', pipe: 'gs', clockhand: 'gs', bokuto: 'gs' };
+const WCLS_NAME = { sp: '突きの型', hm: '叩きつけの型', gs: '斬りの型' };
+Object.assign(MOVES, {
+  wsp1: { dur: .5,  a: [.14, .28], dmg: 9,  reach: 1.9, kb: 1.6, next: 'wsp2', step: .9,  weapon: 1, wcls: 'sp', wi: 0 },   // 突き
+  wsp2: { dur: .55, a: [.15, .32], dmg: 10, reach: 1.9, kb: 1.8, next: 'wsp3', step: 1.0, weapon: 1, wcls: 'sp', wi: 1 },   // 踏みこんで突く
+  wsp3: { dur: .8,  a: [.38, .56], dmg: 16, reach: 2.0, kb: 6.5, knock: 1, step: 2.2, heavy: 1, weapon: 1, wcls: 'sp', wi: 2 },   // 跳んで突き下ろす
+  whm1: { dur: .62, a: [.2, .34], dmg: 11, reach: 1.5, kb: 2.0, next: 'whm2', step: .5, weapon: 1, wcls: 'hm', wi: 0 },   // 振り下ろし
+  whm2: { dur: .62, a: [.22, .37], dmg: 12, reach: 1.5, kb: 2.4, next: 'whm3', step: .6, weapon: 1, wcls: 'hm', wi: 1 },   // 振り上げ
+  whm3: { dur: .88, a: [.33, .51], dmg: 18, reach: 1.6, kb: 7, knock: 1, step: .9, heavy: 1, around: 1, weapon: 1, wcls: 'hm', wi: 2 },   // 地面ごと叩く（周りにも当たる）
+  wgs1: { dur: .6,  a: [.24, .38], dmg: 10, reach: 1.6, kb: 1.8, next: 'wgs2', step: .7, weapon: 1, wcls: 'gs', wi: 0 },   // 袈裟斬り
+  wgs2: { dur: .61, a: [.07, .45], dmg: 7,  reach: 1.6, kb: 1.2, next: 'wgs3', step: .8, weapon: 1, wcls: 'gs', wi: 1 },   // 二度斬り
+  wgs3: { dur: .83, a: [.32, .47], dmg: 17, reach: 1.7, kb: 6.5, knock: 1, step: 1.6, heavy: 1, weapon: 1, wcls: 'gs', wi: 2 },   // 跳んで斬り下ろす
+});
+for (const k of ['wsp1', 'wsp2', 'wsp3', 'whm1', 'whm2', 'whm3', 'wgs1', 'wgs2', 'wgs3']) MOVES[k].key = k;
+Object.assign(POSE_ALIAS, { wsp1: 'jab2', wsp2: 'jab2', wsp3: 'fin', whm1: 'jab2', whm2: 'jab2', whm3: 'fin', wgs1: 'jab2', wgs2: 'jab2', wgs3: 'fin' });
+const WCLS_ST = {
+  wsp1: { c: 'spear:Attack1', s: .2, e: .78, sp: 1.15, xz: 'lock', hit: [[.36, .52]] },
+  wsp2: { c: 'spear:Attack2', s: .95, e: 1.55, sp: 1.1, xz: 'lock', hit: [[1.12, 1.3]] },
+  wsp3: { c: 'spear:Attack3', s: 1.6, e: 2.6, sp: 1.25, xz: 'lock', hit: [[2.08, 2.3]] },
+  whm1: { c: 'hammer:Attack1', s: .25, e: 1.05, sp: 1.3, xz: 'lock', hit: [[.52, .7]] },
+  whm2: { c: 'hammer:Attack2', s: .3, e: 1.1, sp: 1.3, xz: 'lock', hit: [[.58, .78]] },
+  whm3: { c: 'hammer:Attack3', s: .35, e: 1.4, sp: 1.2, xz: 'lock', hit: [[.74, .96]] },
+  wgs1: { c: 'great:Attack1', s: .2, e: .95, sp: 1.25, xz: 'lock', hit: [[.5, .68]] },
+  wgs2: { c: 'sword:Attack2', s: 1.0, e: 1.7, sp: 1.15, xz: 'lock', hit: [[1.08, 1.22], [1.38, 1.52]] },
+  wgs3: { c: 'sword:Attack3', s: 1.6, e: 2.6, sp: 1.2, xz: 'lock', hit: [[1.98, 2.16]] },
+};
+// 武器の技の名前（型があって、そのモーションが読めていれば型の技。なければ、いつもの武器の技）
+function wKey(f, i) {
+  const cls = f.weapon && WCLS[f.weapon.kind], k = cls && ('w' + cls + i);
+  return k && f.moves && f.moves[k] ? k : 'wsw' + i;
+}
+
+// ---- 新しい敵のモーション ----
+{
+  const base = (set, more) => ({ set: 'male', ref: 'Idle', st: { ...PROFILES.male.st, idle: { c: set + ':Idle', m: 'loop' }, ...more } });
+  Object.assign(PROFILES, {
+    // 物干し竿の人: 長い突き / 踏みこみ突き / 走りこんで突く
+    spear: base('spear', {
+      eatk:   { c: 'spear:Attack1', s: .15, e: .9, sp: 1.0, xz: 'lock', hit: [[.36, .52]] },
+      eatk2:  { c: 'spear:Attack2', s: .7, e: 1.6, sp: 1.0, xz: 'lock', hit: [[1.12, 1.3]] },
+      edash:  { c: 'spear:MoveAttack1', e: .95, sp: 1.0, xz: 'lock', hit: [[.5, .66]] },
+      eheavy: { c: 'spear:Attack3', s: 1.3, e: 2.6, sp: 1.0, xz: 'lock', hit: [[2.08, 2.3]] },
+      guard:  { c: 'spear:Block', m: 'loop' }, hurt: { c: 'spear:LightHit', e: .55, sp: 1.4 },
+    }),
+    // 工事中のまま5億年: 大振り / 地面ごと叩く（周り全部）
+    hammer: base('hammer', {
+      walk:   { c: 'hammer:WalkForward_S', m: 'loop', nat: 1.5 }, walkU: { c: 'hammer:WalkLeft_S', m: 'loop', nat: 1.6 }, walkD: { c: 'hammer:WalkRight_S', m: 'loop', nat: 1.6 },
+      eatk:   { c: 'hammer:Attack1', s: .1, e: 1.2, sp: 1.0, xz: 'lock', hit: [[.52, .7]] },
+      eatk2:  { c: 'hammer:Attack2', s: .1, e: 1.2, sp: 1.0, xz: 'lock', hit: [[.58, .78]] },
+      eheavy: { c: 'hammer:Attack3', s: .2, e: 1.5, sp: .95, xz: 'lock', hit: [[.74, .96]] },
+      guard:  { c: 'hammer:Block', m: 'loop' }, hurt: { c: 'hammer:LightHit', e: .5, sp: 1.4 },
+    }),
+    // 木刀を買った修学旅行生: すばやい斬り / 二度斬り / 走りこんで斬る
+    great: base('great', {
+      walk:   { c: 'sword:WalkForward_S', m: 'loop', nat: 1.9 }, walkU: { c: 'sword:WalkLeft_S', m: 'loop', nat: 2.0 }, walkD: { c: 'sword:WalkRight_S', m: 'loop', nat: 2.0 },
+      run:    { c: 'sword:Run_S', m: 'loop', nat: 6.2, steps: 2 },
+      eatk:   { c: 'sword:Attack1', s: .15, e: 1.0, sp: 1.05, xz: 'lock', hit: [[.52, .7]] },
+      eatk2:  { c: 'sword:Attack2', s: .8, e: 1.75, sp: 1.05, xz: 'lock', hit: [[1.08, 1.22], [1.38, 1.52]] },
+      edash:  { c: 'sword:MoveAttack1', e: .9, sp: 1.0, xz: 'lock', hit: [[.16, .32]] },
+      eheavy: { c: 'great:Attack1', s: .1, e: 1.05, sp: 1.0, xz: 'lock', hit: [[.5, .68]] },
+      guard:  { c: 'sword:Block', m: 'loop' },
+    }),
+    // エアで弓を引く弓道部: 弓は見えないが、矢は飛んでくる。近いと弓で殴る / 跳んで逃げる
+    archer: base('archer', {
+      walk:   { c: 'archer:WalkForward_S', m: 'loop', nat: 1.9 }, walkU: { c: 'archer:WalkLeft_S', m: 'loop', nat: 2.0 }, walkD: { c: 'archer:WalkRight_S', m: 'loop', nat: 2.0 },
+      run:    { c: 'archer:Run_S', m: 'loop', nat: 6.2, steps: 2 },
+      eatk:   { c: 'archer:Attack1', e: .8, sp: 1.0, xz: 'lock', hit: [[.26, .42]] },
+      erange: { seq: [{ c: 'archer:RangeAttack1', s: 0, e: .3, sp: .45, xz: 'lock' }, { c: 'archer:RangeAttack1', s: .3, sp: 1.0, xz: 'lock' }],
+                mv: { shot: null, aim: 1, burst: { at: .7, n: 1, gap: .2, spd: 13, dmg: 10, kb: 3, knock: 1, kind: 'arrow' } } },
+      backstep: { c: 'archer:MoveAttack2_S', e: 1.2, sp: 1.15, xz: 'lock' },
+      hurt:   { c: 'archer:LightHit', e: .55, sp: 1.4 }, guard: { c: 'archer:Block', m: 'loop' },
+    }),
+    // 装填に5億年かかる狙撃手: 痛い 1 発のあと、長い長い装填（そのあいだは無防備）
+    xbow: base('xbow', {
+      walk:   { c: 'xbow:WalkForward_S', m: 'loop', nat: 1.9 }, walkU: { c: 'xbow:WalkLeft_S', m: 'loop', nat: 2.0 }, walkD: { c: 'xbow:WalkRight_S', m: 'loop', nat: 2.0 },
+      run:    { c: 'xbow:Run_S', m: 'loop', nat: 6.0, steps: 2 },
+      eatk:   { c: 'xbow:Attack1', e: .9, sp: 1.0, xz: 'lock', hit: [[.2, .36]] },
+      erange: { seq: [{ c: 'xbow:RangeAttack1', sp: .7, xz: 'lock' }, { c: 'xbow:Reload', sp: .42, xz: 'lock' }, { c: 'xbow:Reload', sp: .42, xz: 'lock' }],
+                mv: { shot: null, aim: 1, burst: { at: .3, n: 1, gap: .2, spd: 21, dmg: 15, kb: 5, knock: 1, kind: 'arrow', big: 1 } } },
+      hurt:   { c: 'xbow:LightHit', e: .55, sp: 1.4 }, guard: { c: 'xbow:Block', m: 'loop' },
+    }),
+  });
+}
+// 武器の型の技を、どのモーション一式にも足す（主人公・相棒の流派がどれでも使える）
+for (const P of Object.values(PROFILES)) if (P && P.st) Object.assign(P.st, WCLS_ST);
+
+Object.assign(ENEMIES, {
+  poleman: { copy: 'blade', name: '物干し竿の人（洗濯物が乾かない）', prof: 'spear', wpn: 'pole', hp: 52, spd: 1.9, pow: 1.1, reach: 1.85, color: 0x5a7aa0, accent: 0xff8ab0, scale: 1.0, score: 260, dasher: 1, heavyAtk: 1, guard: .15 },
+  koji:    { copy: 'power', name: '工事中のまま5億年', prof: 'hammer', wpn: 'sledge', hp: 96, spd: 1.3, pow: 1.35, reach: 1.45, color: 0xe0a020, accent: 0x2a2a2a, scale: 1.2, score: 340, heavyAtk: 1, guard: .1 },
+  shugaku: { copy: 'blade', name: '木刀を買った修学旅行生', prof: 'great', wpn: 'bokuto', hp: 46, spd: 2.6, pow: 1.1, reach: 1.35, color: 0x1f2a4a, accent: 0xffe14a, scale: .95, score: 280, dasher: 1, heavyAtk: 1, guard: .2 },
+  archer:  { copy: 'gun', name: 'エアで弓を引く弓道部', prof: 'archer', hp: 34, spd: 2.1, pow: 1, reach: 1.0, color: 0xe8e8f0, accent: 0x2a2a3a, scale: .98, score: 300, shooter: 2.0, range: 9, shotCd: 2.8, keepAway: 5.2, look: 'tie' },
+  xbow:    { copy: 'gun', name: '装填に5億年かかる狙撃手', prof: 'xbow', hp: 40, spd: 1.7, pow: 1, reach: 1.0, color: 0x3a4a2a, accent: 0xff3030, scale: 1.0, score: 320, shooter: 2.6, range: 9.5, shotCd: 1.6, keepAway: 5.6, reload: 1, look: 'gun' },
+});
+// 敵の武器の振る舞い（aiUpg から毎フレーム）: 装填中の表示
+function aiWpn(e, dt) {
+  const A = e.ai;
+  if (e.spec.reload && e.state === 'erange' && e.t > .85 && A.rld !== e.moveSeq) { A.rld = e.moveSeq; textFx(e.x, 2.1 * e.scl, e.z, '装填中…', COL.white, 1.1, 2.0); }
+}
+// 型が変わったら、頭の上に出す（主人公だけ）
+function wclsHint(f) {
+  const cls = f.weapon && WCLS[f.weapon.kind];
+  if (cls && f.isPlayer && f.wclsShown !== f.weapon) { f.wclsShown = f.weapon; textFx(f.x, 2.25, f.z, WCLS_NAME[cls], COL.gold, 1.15, 1.0); }
+}
 function prepClone() {
   if (G.cloneBody && G.cloneOf !== (G.p1Char && G.p1Char.vrm)) G.cloneBody = null;   // キャラを替えたら、分身も作り直す
   if (G.cloneBody || G.cloneJob || !G.p1Char || !G.p1Char.vrm) return;
@@ -6438,6 +6572,7 @@ function spawnEnemy(type, fromLeft) {
   e.shotCd = rnd(1.5, 3);
   const St = STAGES[G.stage];   // ふつうの大きさの雑魚は、ときどき武器を持って出てくる（吹っ飛ばすと落とす → 拾える）
   if (G.mode === 'coop' && St.eweapons && !spec.boss && !spec.mid && (spec.scale || 1) <= 1.1 && !spec.jumper && !spec.prof && Math.random() < (St.armed || 0)) holdWeapon(e, pick(St.eweapons));
+  if (spec.wpn) holdWeapon(e, spec.wpn);   // 自分の武器を持ってくる敵（倒すと落とす）
   e.x = G.camX + (fromLeft ? -1 : 1) * (halfW + 1.2 + Math.random() * 1.5); e.z = rnd(Z_MIN + .2, Z_MAX - .2); e.face = fromLeft ? 1 : -1;
   if (spec.boss || spec.mid) { e.x = G.camX + halfW + 1.5; e.z = -.3; e.ai.enterT = 1.6; }
   gimSpawn(e, spec);
