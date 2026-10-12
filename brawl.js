@@ -2525,6 +2525,7 @@ function applyHit(a, b, m) {
   if (b.state === 'grabbed' && b.holder && b.holder !== a) { const h = b.holder; h.victim = null; if (h.state === 'grab') h.state = 'idle'; b.holder = null; }
   const hp0 = b.hp;
   b.hp = Math.max(0, b.hp - dmg); b.flash = .12; b.lastHitBy = a;
+  piyoAdd(a, b, dmg, big, m);   // ぴよりの量を足す
   hitStop = Math.max(hitStop, big ? .13 : .06); shake(big ? .3 : .1);
   fxHit(a, b, m, dir, (ax + b.x) / 2 + dir * .2, hy, b.z, big, dmg);
   if (m.wk) { sfx.whit(WEAPONS[m.wk].snd, big); if (m.homer) { sfx.homer(); slowT = Math.max(slowT, .35); camPunch = Math.max(camPunch, 2.2); } }
@@ -2538,6 +2539,7 @@ function applyHit(a, b, m) {
   }                                                // 敵を倒した音と火花
   if (m.keepGrab && b.state === 'grabbed' && b.hp > 0) { /* ひざ蹴り中はつかんだまま */ }
   else if (big || b.hp <= 0) { if (b.weapon && b.weapon.kind !== 'knuckle') dropWeapon(b, dir); b.state = 'knock'; b.t = 0; b.vy = big ? (m.launch || 5.4) : 4.6; b.vx = dir * (m.kb || 4) * (b.spec?.boss ? .45 : 1); b.face = -dir; b.y = Math.max(b.y, .05); b.move = null; b.holder = null; }
+  else if (b.state === 'stun' && b.piyoT) { b.vx = dir * .5; }   // ぴよっている間は、ふつうの攻撃では起きない
   else if (!(b.spec?.armor || (b.copy && b.copy.armor))) { b.state = 'hurt'; b.t = 0; b.vx = dir * (m.kb || 1); b.face = -dir; b.move = null; b.holder = null; }
   else { b.x += dir * .08; }
   if (a.team !== 'enemy') {
@@ -2928,7 +2930,7 @@ function updateFighter(f, dt) {
     emoteTick(f, dt);
   } else if (S === 'stun') {
     f.vx *= Math.exp(-8 * dt); f.vz = 0;
-    if (f.t > .9) { f.state = 'idle'; f.t = 0; }
+    if (f.t > (f.piyoT || .9)) { f.state = 'idle'; f.t = 0; }
   } else if (DODGES.has(S)) {
     const d = SD(f, S, .42);
     if (f.t > d * .62) { f.vx *= Math.exp(-14 * dt); f.vz *= Math.exp(-14 * dt); }
@@ -6548,6 +6550,95 @@ function wclsHint(f) {
   const cls = f.weapon && WCLS[f.weapon.kind];
   if (cls && f.isPlayer && f.wclsShown !== f.weapon) { f.wclsShown = f.weapon; textFx(f.x, 2.25, f.z, WCLS_NAME[cls], COL.gold, 1.15, 1.0); }
 }
+// =========================================================================================
+// 2026-10-13 (3): ぴよる（気絶）と、流派ごとの波動のかまえ
+//   ① 短い時間に大きなダメージを受けると「ぴよる」。主人公も相棒も敵も同じ（ボスは、なりにくい・短い）
+//      ぴよっている間は、ふつうの攻撃では起きない（吹っ飛ばす技か、時間で起きる）。主人公はボタン連打で早く起きる
+//      連続技の途中の 1 発は、ぴよりやすさが上がる
+//   ② 波動のかまえ: 爆裂ファイター = いつもの踏みこみ / ストリート = 空手の鶴の構え・両手で押し出す / ヘビー級 = 両こぶしを振り上げて、地面ごと
+// =========================================================================================
+Object.assign(sfx, {
+  piyo() { notes('square', [1568, 1319, 1568, 1319, 1760], .07, .06, .1); notes('triangle', [784, 659, 784], .14, .1, .12, .05); },
+  piyoUp() { notes('square', [523, 784, 1047], .06, .08, .14); },
+});
+// ぴよるまでの量（受けたダメージの合計。何もされないと、すぐ減っていく）
+function piyoMax(f) {
+  if (f.team !== 'enemy') return 46;
+  const sp = f.spec || {};
+  return Math.max(26, Math.min(90, f.maxhp * .42)) * (sp.boss ? 1.7 : sp.mid ? 1.3 : 1);
+}
+function piyoAdd(a, b, dmg, big, m) {
+  if (!b.alive || b.out || b.hp <= 0 || G.finale || G.cine || m.env) return;
+  if (b.state === 'stun' && b.piyoT) return;
+  if ((b.piyoImm || 0) > 0) return;
+  const combo = a.team !== 'enemy' && G.combo >= 6 ? 1 + Math.min(.8, (G.combo - 6) * .06) : 1;   // 連続技が続くほど、ぴよりやすい
+  b.piyoG = (b.piyoG || 0) + dmg * (big ? 1.25 : 1) * combo; b.piyoLast = gameTime;
+  if (b.piyoG >= piyoMax(b)) b.piyoPend = 1;
+}
+function piyoHead(f) {
+  try { const h = f.body && f.body.vrm && f.body.rawBone && f.body.rawBone('head'); if (h) { h.updateWorldMatrix(true, false); _pv.setFromMatrixPosition(h.matrixWorld); return _pv; } } catch (e) {}
+  return _pv.set(f.x, (f.y || 0) + 1.75 * Math.min(1.5, f.scl || 1), f.z);
+}
+const _pv = new T.Vector3();
+function piyoStart(f) {
+  const boss = f.spec && (f.spec.boss || f.spec.mid);
+  f.state = 'stun'; f.t = 0; f.move = null; f.vx = f.vz = 0; f.piyoPend = 0; f.piyoG = 0;
+  f.piyoT = f.team === 'enemy' ? (boss ? 1.6 : 2.6) : 2.3;
+  if (f.victim) releaseGrab(f);
+  // 頭の上を回る星とひよこ
+  const g = new T.Group(), items = [];
+  for (let i = 0; i < 5; i++) {
+    const ch = i % 2 ? '★' : 'ピ', col = i % 2 ? 0xffe14a : 0xfff2a8;
+    const sp = new T.Sprite(new T.SpriteMaterial({ map: glyphTex(ch, col, true), transparent: true, depthWrite: false })); sp.scale.setScalar(i % 2 ? .3 : .24); g.add(sp); items.push(sp);
+  }
+  scene.add(g); f.piyoFx = { g, items, a: 0 };
+  const hp = piyoHead(f);
+  textFx(hp.x, hp.y + .5, hp.z, f.team === 'enemy' ? 'ピヨった!' : 'ピヨピヨ〜', f.team === 'enemy' ? COL.gold : COL.pink, f.team === 'enemy' ? 1.6 : 1.3, 1.0);
+  sfx.piyo(); if (f.team === 'enemy' && f.lastHitBy && f.lastHitBy.isPlayer) shake(.08);
+  if (f.isClaude) say('piyoC', 2); else if (f.isPlayer && G.p2 && G.p2.isClaude && !G.p2.out) say('piyoP', 2);
+  else if (f.team === 'enemy' && f.lastHitBy && f.lastHitBy.team !== 'enemy' && Math.random() < .35) say('piyoE', 4);
+}
+function piyoEnd(f) {
+  if (f.piyoFx) { scene.remove(f.piyoFx.g); f.piyoFx = null; }
+  f.piyoT = 0; f.piyoImm = 4; f.piyoG = 0; f.piyoPend = 0;
+}
+function piyoTick(dt) {
+  for (const f of fighters) {
+    if (!f.alive || f.out) { if (f.piyoFx) piyoEnd(f); continue; }
+    if (f.piyoImm > 0) f.piyoImm -= dt;
+    if (f.piyoG > 0 && gameTime - (f.piyoLast || 0) > .9) f.piyoG = Math.max(0, f.piyoG - dt * 16);
+    if (f.piyoPend) {
+      if (f.hp <= 0 || f.state === 'dead') f.piyoPend = 0;
+      else if (f.state === 'idle' || f.state === 'walk' || f.state === 'hurt' || f.state === 'guard') piyoStart(f);   // 吹っ飛んだら、起き上がってから
+    }
+    if (f.piyoT) {
+      if (f.state !== 'stun') { piyoEnd(f); continue; }
+      const c = f.ctrl;   // 主人公は、ボタン連打・レバガチャで早く起きる
+      if (f.isPlayer && c) { const any = !!(c.atk || c.jump || c.sp || c.rng || c.dodge || c.guard || c.duo || c.sup) || (Math.abs(c.mx) > .5 && Math.sign(c.mx) !== f.piyoMx); if (Math.abs(c.mx) > .5) f.piyoMx = Math.sign(c.mx); if (any && !f.piyoHeld) f.t += .12; f.piyoHeld = any && !(Math.abs(c.mx) > .5); }
+      if (f.t >= f.piyoT - .02) { if (f.team !== 'enemy') { sfx.piyoUp(); textFx(f.x, 2.1, f.z, 'はっ!', COL.white, 1.1, .7); } }
+      const P = f.piyoFx; if (P) {
+        P.a += dt * 5.5; const hp = piyoHead(f), r = .32 * Math.min(1.4, f.scl || 1);
+        P.items.forEach((s, i) => { const a = P.a + i * 6.283 / P.items.length; s.position.set(hp.x + Math.cos(a) * r, hp.y + .3 + Math.sin(a * 2) * .04, hp.z + Math.sin(a) * r * .55); });
+      }
+    }
+  }
+}
+// セリフ（性格ごと。無いものは genki で代用される）
+Object.assign(LINES.genki, { piyoC: ['ほえ〜…星が…', 'ぴ、ぴよ…', 'あたま、くらくらする〜'], piyoP: ['しっかりして！ ボタン連打！', 'ちょっと！ 目を覚まして！'], piyoE: ['今よ！ ぴよってる！', 'チャンス！ 殴り放題！'] });
+Object.assign(LINES.oshitoyaka, { piyoC: ['め、目が回ります…'], piyoP: ['大丈夫ですか！？ ボタンを連打してください！'], piyoE: ['いまのうちです！'] });
+Object.assign(LINES.cool, { piyoC: ['……視界が、揺れる'], piyoP: ['しっかりしろ。連打だ'], piyoE: ['好機だ。畳みかけろ'] });
+Object.assign(LINES.tonio, { piyoC: ['ぴよぴよでちゅ〜'], piyoP: ['れんだでちゅ！ おきるでちゅ！'], piyoE: ['いまでちゅ！ たたくでちゅ！'] });
+Object.assign(MOODTAG, { piyoC: 'surprised', piyoP: 'surprised', piyoE: 'happy' });
+
+// ---- 流派ごとの波動のかまえ（押している間は、かまえのまま溜める）----
+Object.assign(PROFILES.street.st, {
+  ranged:  { c: 'karate:RangeAttack1', sp: 1.3, shot: .56 },                                                 // 空手: 片足で鶴の構え → 掌で押し出す
+  ranged2: { c: 'superpower:Super_Power_04', s: 4.2, e: 5.7, sp: 1.5, xz: 'lock', shot: 4.92 },               // 両手を腰にためて、押し出す
+});
+Object.assign(PROFILES.hvy.st, {
+  ranged:  { seq: [{ c: 'SpecialAttack1', s: 0, e: .42, sp: 1.3 }, { c: 'RangeAttack2', s: .62, e: 1.22, sp: 1.3 }], shot: .33 },   // 両こぶしを振り上げて → 両手で突き出す
+  ranged2: { seq: [{ c: 'SpecialAttack1', s: 0, e: .44, sp: 1.2 }, { c: 'SpecialAttack1', s: .44, e: 1.15, sp: 1.2 }], shot: .4 }, // 振り上げて → 地面ごと叩く
+});
 function prepClone() {
   if (G.cloneBody && G.cloneOf !== (G.p1Char && G.p1Char.vrm)) G.cloneBody = null;   // キャラを替えたら、分身も作り直す
   if (G.cloneBody || G.cloneJob || !G.p1Char || !G.p1Char.vrm) return;
@@ -6929,7 +7020,7 @@ function sim(dt) {
   for (const e of es) { aiEnemy(e, dt, engaged); steerAI(e); }
   if (P2.alive && !P2.out && P2.ai) steerAI(P2);
   for (const f of fighters) if (f.alive && !f.out) updateFighter(f, dt);
-  upgTick(dt);
+  upgTick(dt); piyoTick(dt);
   separate();
   resolveHits();
   updateShots(dt);
