@@ -1645,12 +1645,12 @@ const ENEMIES = {
 // par = 目安のクリア時間（秒。これより速いとタイムボーナスとランクが上がる）
 // weapons = 地面に落ちている武器 [x, z, 種類] / armed = 雑魚が武器を持って出てくる割合 / eweapons = そのとき持つ武器
 const STAGES = [
-  { name: '5億年商店街', theme: 'street', intro: 'Claude と協力して進め！', clear: '5億年商店街を取り戻した！', par: 320, minions: ['grunt', 'speedy', 'boxer'],
+  { name: '5億年商店街', theme: 'street', intro: 'Claude と協力して進め！', clear: '5億年商店街を取り戻した！', par: 320, minions: ['grunt', 'speedy', 'boxer', 'rookie'],
     areas: [
-      { lock: 8,  waves: [['grunt', 'grunt'], ['grunt', 'speedy', 'boxer']] },
+      { lock: 8,  waves: [['grunt', 'sleeper'], ['grunt', 'speedy', 'boxer']] },
       { lock: 27, waves: [['grunt', 'knife', 'boxer'], ['mid1', 'grunt']] },                          // 中ボス 1
-      { lock: 46, waves: [['heavy', 'gunner', 'grunt'], ['speedy', 'boxer', 'knife', 'gunner']] },
-      { lock: 63, waves: [['knife', 'boxer', 'gunner'], ['mid2', 'speedy']] },                         // 中ボス 2
+      { lock: 46, waves: [['heavy', 'gunner', 'grunt'], ['rookie', 'boxer', 'knife', 'gunner']] },
+      { lock: 63, waves: [['knife', 'guardman', 'boxer'], ['mid2', 'speedy']] },                         // 中ボス 2
       { lock: 80, boss: 1, waves: [['boss', 'grunt']] },                                              // 大ボス
     ],
     armed: .2, eweapons: ['stick', 'bat', 'pipe'],
@@ -1661,9 +1661,9 @@ const STAGES = [
       banana: [[6, -.6], [13.5, 1.2], [22, -1.3], [37, .4], [44.5, -.9], [58, 1.4], [70.5, .2], [78.5, -.8]], truck: { from: 1, every: [15, 22] } } },
   { name: '5億年ボタン工場', theme: 'factory', intro: 'いちばん奥の巨大ボタンをめざせ！', clear: '5億年ボタン工場を止めた！', par: 360, minions: ['guard', 'spark', 'jet'],
     areas: [
-      { lock: 8,  waves: [['guard', 'guard', 'jet'], ['welder', 'rocket', 'guard']] },
+      { lock: 8,  waves: [['guard', 'sleeper', 'jet'], ['welder', 'guardman', 'guard']] },
       { lock: 27, waves: [['press', 'witch', 'spark'], ['esper', 'guard']] },                         // 中ボス 1（超能力者）
-      { lock: 46, waves: [['brute', 'jet', 'gunner'], ['witch', 'rocket', 'jet', 'guard']] },
+      { lock: 46, waves: [['brute', 'jet', 'guardman'], ['witch', 'rocket', 'rookie', 'guard']] },
       { lock: 63, waves: [['brute', 'welder', 'witch'], ['mid4', 'jet']] },                         // 中ボス 2
       { lock: 80, boss: 1, waves: [['boss2', 'guard']] },                                             // 大ボス
     ],
@@ -2203,6 +2203,7 @@ async function loadProfile(name, role) {
 // いまの状態で使うクリップの名前（歩きは向きと速さで変える）
 function animKey(f) {
   const S = f.state;
+  if (S === 'emote') return f.emo || 'idle';
   if (S === 'walk') {
     if (f.fast) return 'run';
     return Math.abs(f.vz) > Math.abs(f.vx) * 1.3 + .1 ? (f.vz < 0 ? 'walkU' : 'walkD') : 'walk';
@@ -2500,7 +2501,7 @@ function tryGrab(f) {
 }
 // 当たったときの処理。m.dir = 飛ばす向き（飛び道具用）、m.x = 当たった場所。受け止められたら false
 function applyHit(a, b, m) {
-  const pow = (a.spec?.pow || 1) * ((a.copy && a.copy.pow && !m.env && m.key !== 'shot') ? a.copy.pow : 1);
+  const pow = (a.spec?.pow || 1) * ((a.copy && a.copy.pow && !m.env && m.key !== 'shot') ? a.copy.pow : 1) * (a.powMul || 1) * (a.buffT > 0 && !m.env ? 1.35 : 1);   // powMul = 起こされて怒った課長 / buffT = 相棒の応援
   let dmg = m.dmg * pow * (a.team === 'enemy' && G.mode === 'coop' ? DIFF_E[G.diff] : 1) * (a.team !== 'enemy' && G.mode === 'coop' && !m.env ? HERO_POW[G.diff] : 1);
   if (b.copy && b.copy.armor) dmg *= .6;   // 怪力をコピー中は打たれ強い
   if (!m.env) addMeter(a, Math.min(dmg, b.hp) * METER_GAIN.hit);
@@ -2728,28 +2729,32 @@ function spawnBolts(f, o) {
   for (let i = 0; i < o.n; i++) {
     const h = hs[i % hs.length], far = i >= hs.length;   // まず全員の足もとへ。残りはそのまわりへ散らす
     const x = clamp(h.x + (far ? rnd(-2.4, 2.4) : h.vx * .25), G.camX - halfW + .6, G.camX + halfW - .6), z = clamp(h.z + (far ? rnd(-1.3, 1.3) : 0), Z_MIN, Z_MAX);
-    const ring = new T.Mesh(hazGeo, new T.MeshBasicMaterial({ color: 0xc9a6ff, transparent: true, opacity: .9, depthWrite: false, side: T.DoubleSide, fog: false }));
-    const fill = new T.Mesh(hazFill, new T.MeshBasicMaterial({ color: 0x9d7bff, transparent: true, opacity: .35, depthWrite: false, side: T.DoubleSide, blending: T.AdditiveBlending, fog: false }));
+    const gren = o.kind === 'gren';
+    const ring = new T.Mesh(hazGeo, new T.MeshBasicMaterial({ color: gren ? 0xff6a3a : 0xc9a6ff, transparent: true, opacity: .9, depthWrite: false, side: T.DoubleSide, fog: false }));
+    const fill = new T.Mesh(hazFill, new T.MeshBasicMaterial({ color: gren ? 0xff3a1a : 0x9d7bff, transparent: true, opacity: .35, depthWrite: false, side: T.DoubleSide, blending: T.AdditiveBlending, fog: false }));
     ring.rotation.x = fill.rotation.x = -Math.PI / 2; ring.position.set(x, .03, z); fill.position.set(x, .025, z); ring.scale.setScalar(o.r); fill.scale.setScalar(.01); ring.visible = fill.visible = false;
     scene.add(ring, fill);
-    hazards.push({ x, z, t: -i * (o.gap || 0), delay: o.delay, r: o.r, dmg: o.dmg, owner: f, team: f.team, ring, fill });
+    hazards.push({ x, z, t: -i * (o.gap || 0), delay: o.delay, r: o.r, dmg: o.dmg, owner: f, team: f.team, ring, fill, kind: o.kind, sx: f.x + f.face * .4, sz: f.z });
   }
 }
-function clearHazards() { for (const h of hazards) { scene.remove(h.ring); scene.remove(h.fill); } hazards = []; }
+function clearHazards() { for (const h of hazards) { scene.remove(h.ring); scene.remove(h.fill); if (h.g) scene.remove(h.g); } hazards = []; }
 function updateHazards(dt) {
   for (let i = hazards.length - 1; i >= 0; i--) {
     const h = hazards[i]; h.t += dt;
     if (h.t < 0) continue;
     const k = clamp(h.t / h.delay, 0, 1);
     h.ring.visible = h.fill.visible = true; h.fill.scale.setScalar(Math.max(.01, h.r * k)); h.ring.material.opacity = .55 + .45 * Math.sin(h.t * 26);
-    if (Math.random() < .5) glow.add(h.x + rnd(-h.r, h.r) * .7, rnd(.1, 2.6), h.z + rnd(-.3, .3), 0, rnd(-3, -1), 0, rnd(.15, .3), .1, .02, .8, .65, 1.4, .9, 0, 0);
+    if (h.kind === 'gren') grenFly(h, dt);
+    else if (Math.random() < .5) glow.add(h.x + rnd(-h.r, h.r) * .7, rnd(.1, 2.6), h.z + rnd(-.3, .3), 0, rnd(-3, -1), 0, rnd(.15, .3), .1, .02, .8, .65, 1.4, .9, 0, 0);
     if (h.t < h.delay) continue;
     // 落ちる
     scene.remove(h.ring); scene.remove(h.fill); hazards.splice(i, 1);
+    if (h.kind === 'gren') grenBoom(h); else {
     sfx.thunder(); shake(.28); wFlash = Math.max(wFlash, .22);
     pillarFx(h.x, h.z, h.r * .8, 7, .32, [.8, .66, 1.3], .5); pillarFx(h.x, h.z, h.r * .3, 7, .22, COL.white, .8);
     flashFx(h.x, .6, h.z + .2, 4.5, [.75, .6, 1.3], .2, .7); ringFx(h.x, .05, h.z, .2, h.r * 2.4, .4, [.8, .66, 1.3], 'ground'); ringFx(h.x, .05, h.z, .1, h.r * 1.5, .3, COL.white, 'ground', 1, .7);
     for (let n = 0; n < 26; n++) { const a = rnd(0, 6.283), v = rnd(2, 8); glow.add(h.x, .2, h.z, Math.cos(a) * v, rnd(1, 7), Math.sin(a) * v * .5, rnd(.3, .6), rnd(.1, .2), .02, 1.2, 1, 1.6, 1, 9, 1.5); }
+    }
     for (const b of fighters) {
       if (!b.alive || b.out || b.team === h.team || b.inv > 0 || downish(b.state)) continue;
       if (Math.hypot(b.x - h.x, (b.z - h.z) * 1.4) < h.r + .15 && b.y < 1.5) applyHit(h.owner, b, { dmg: h.dmg, kb: 3.5, knock: 1, heavy: 1, dir: Math.sign(b.x - h.x) || 1, x: h.x, key: 'bolt' });
@@ -2913,6 +2918,8 @@ function updateFighter(f, dt) {
   } else if (S === 'guardhit') {
     f.vx *= Math.exp(-9 * dt); f.vz = 0;
     if (f.t > Math.min(.3, SD(f, 'guardhit', .26))) { f.state = c.guard ? 'guard' : 'idle'; f.t = c.guard ? .2 : 0; }
+  } else if (S === 'emote') {
+    emoteTick(f, dt);
   } else if (S === 'stun') {
     f.vx *= Math.exp(-8 * dt); f.vz = 0;
     if (f.t > .9) { f.state = 'idle'; f.t = 0; }
@@ -3007,6 +3014,7 @@ function aiEnemy(e, dt, engaged) {
   const c = e.ctrl; c.atk = c.jump = c.sp = false; c.mx = c.mz = 0;
   const A = e.ai; A.think -= dt;
   A.guardT = (A.guardT || 0) - dt; c.guard = A.guardT > 0;
+  if (aiUpg(e, dt)) return;   // 感情（居眠り・笑う・おびえる）
   if (e.state === 'jump' && A.autoKick && e.t > .2) { c.atk = true; A.autoKick = false; }
   if (e.state !== 'idle' && e.state !== 'walk') return;
   if (A.enterT > 0) {   // 画面の外から歩いて入ってくる（扉から出てくる敵は、奥から手前へ）
@@ -5017,7 +5025,7 @@ function addTarai(f, delay) {
         for (let i = 0; i < 10; i++) { const a = i / 10 * 6.283; streaks.add(f.x, top, f.z, Math.cos(a) * 6, rnd(1, 3), Math.sin(a) * 3, .25, .05, .05, 1, 1, .8, 6, 1.5); }
         const foe = f.team === 'enemy';
         if (foe) { if (envHit(f, 7, { knock: 0, kb: 0 }) && f.hp > 0 && !f.spec.armor) { f.state = 'stun'; f.t = 0; f.move = null; } }
-        else if (f.inv <= 0 && !downish(f.state)) { f.hp = Math.max(1, f.hp - 2); f.state = 'stun'; f.t = .3; f.move = null; f.vx = f.vz = 0; f.flash = .12; if (f.victim) releaseGrab(f); }
+        else if (f.inv <= 0 && !downish(f.state)) { f.hp = Math.max(1, f.hp - 2); emote(f, 'eHead', 1.0, null, .6); f.flash = .12; if (f.victim) releaseGrab(f); }   // たらい: 頭をおさえる
       }
     } else {
       Tr.vy -= 22 * dt; Tr.y += Tr.vy * dt; g.position.x += Tr.vx * dt; g.position.y = Tr.y; g.rotation.z += dt * 9;
@@ -5347,6 +5355,7 @@ function crater(x, z, r = 2.3) {
 }
 // 叩きつけ: 画面が止まり、白く飛び、輪が何重にも走り、地面が割れて、破片と粒が吹き上がる
 function superSlam(C, x, y, z) {
+  later(.9, () => scareNearby(x));   // 見ていた敵がおびえる
   const a = C.a, v = C.v, c = teamCol(a), gx = v.x, gz = v.z;
   sfx.boom(true); sfx.thunder(); wFlash = 1; slowT = Math.max(slowT, .95); impactFrame(); stampIn('5億年ぶんの一撃');
   crater(gx, gz, 2.6);
@@ -5679,7 +5688,7 @@ function addWarp(x1, z1, x2, z2, i) {
 STAGES.push(
   { name: '5億年駅', theme: 'station', intro: '電車から敵が降りてくる。黄色い線の内側で戦え！', clear: '5億年駅を 定刻で発車した！', par: 400, minions: ['commuter', 'rusher', 'ninja'],
     areas: [
-      { lock: 8,  waves: [['commuter', 'commuter', 'rusher'], ['commuter', 'bento', 'ninja']] },
+      { lock: 8,  waves: [['commuter', 'sleeper', 'rusher'], ['commuter', 'bento', 'ninja']] },
       { lock: 27, waves: [['drunk', 'rusher', 'sniper'], ['mid5', 'commuter']] },                        // 中ボス 1（駆け込み乗車の常習）
       { lock: 46, waves: [['ninja', 'bento', 'commuter', 'rusher'], ['drunk', 'sniper', 'ninja', 'bento']] },
       { lock: 63, waves: [['drunk', 'rusher', 'sniper'], ['mid6', 'ninja']] },                           // 中ボス 2（キセル忍者）
@@ -6226,6 +6235,185 @@ function finaleDebug() {
   for (const h of heroes()) if (!h.out) { h.state = 'win'; h.t = 0; }
   banner('BOSS DOWN!!', STAGES[G.stage].clear); setTimeout(finaleStart, 900);
 }
+// =========================================================================================
+// 2026-10-13: 新しいモーション（Heavy Fighter / Futuristic Soldier 2 / Cartoon Motion Vol.2）で、遊びを増やす
+//   ① 流派「ヘビー級」（主人公・相棒どちらでも選べる）
+//   ② 新しい敵: 減量に失敗したルーキー（重い一撃）/ 5億年後から来た警備員（しゃがみ撃ち・手りゅう弾）/ 定時まで寝る課長（起こすと怒る）
+//   ③ 感情のリアクション: 倒れた主人公を敵が笑う（そのあいだ無防備）/ 超必殺を見た敵がおびえる / 相棒の応援で主人公がパワーアップ / ひまだとあくび
+// =========================================================================================
+Object.assign(DEFAULT_SETS, { heavy: './motions/brawl/heavy', soldier: './motions/brawl/soldier', cartoon: './motions/brawl/cartoon' });
+// ---- ① 流派「ヘビー級」: 女性格闘パックと同じ作りのパックなので、技の割りふりは同じ。当たる時刻だけ、このパックに合わせる ----
+PROFILES.hvy = { set: 'heavy', ref: 'Idle', st: { ...PROFILES.female.st,
+  idle:     { c: 'Idle', m: 'loop' },
+  walk:     { c: 'WalkForward_S', m: 'loop', nat: 1.9 }, walkU: { c: 'WalkLeft_S', m: 'loop', nat: 2.0 }, walkD: { c: 'WalkRight_S', m: 'loop', nat: 2.0 },
+  run:      { c: 'Run_S', m: 'loop', nat: 6.6, steps: 2 },
+  jab1:     { c: 'Jab', sp: 1.15, hit: [[.02, .14]] },
+  jab2:     { c: 'Punch', sp: 1.15, hit: [[.14, .28]] },
+  jab3:     { c: 'Kick', sp: 1.1, hit: [[.08, .22]] },
+  fin:      { c: 'Uppercut', e: .95, sp: 1.15, hit: [[.34, .5]] },                                 // 大きなアッパー（打ち上げ）
+  finb:     { c: 'Sweep', e: .6, sp: 1.05, hit: [[.1, .26]] },                                     // 足払い
+  finc:     { c: 'MoveAttack2_S', sp: 1.1, hit: [[.32, .5]] },
+  dashatk:  { c: 'MoveAttack1_S', e: 1.0, sp: 1.15, hit: [[.6, .86]] },                            // 走りこんで低く突く
+  jump:     { c: 'Jump_S', s: .14, e: .74, m: 'jump', hips: 'air' },
+  jkick:    { c: 'HighKick_S', s: .18, e: .62, sp: 1.2, hips: 'air', hit: [[.27, 9]] },
+  jpunch:   { c: 'HighPunch_S', s: .2, e: .62, sp: 1.2, hips: 'air', hit: [[.3, 9]] },
+  land:     { c: 'Land', e: .5, sp: 1.8 },
+  special:  { c: 'SpecialAttack1', e: 1.3, sp: 1.1, hit: [[.48, .7]] },                           // 必殺: 跳んで地面を叩く
+  special2: { c: 'SpecialAttack2', e: 1.05, sp: 1.1, hit: [[.5, .68]] },                           // 必殺: 踏みこんで剛拳
+  ranged:   { c: 'RangeAttack1', sp: 1.3, shot: .54 },
+  ranged2:  { c: 'RangeAttack2', sp: 1.3, shot: .62 },
+  wsw1:     { c: 'Punch', sp: 1.1, hit: [[.14, .28]] },
+  wsw2:     { c: 'LowPunch', sp: 1.1, hit: [[.1, .25]] },
+  wsw3:     { c: 'HighPunch_S', s: .1, e: .62, sp: 1.15, hit: [[.28, .42]] },
+  wthrow:   { c: 'RangeAttack2', s: .1, e: .95, sp: 1.5, toss: .5 },
+  hurt:     { c: 'LightHit', e: .5, sp: 1.5 },
+  knock:    { c: 'Knockdown', e: .5 },
+  thrown:   { c: 'JumpHitReact', m: 'loop', hips: 'air', fall: 1 },
+  down:     { c: 'Knockdown', s: .5, e: 1.6, sp: .8 },
+  dead:     { c: 'Knockdown', s: 1.5, e: 1.6, sp: .1 },
+  getup:    { c: 'Knockdown', s: 1.7, e: 2.33, sp: 1.5 },
+  grabbed:  { c: 'Choke', m: 'loop' }, guard: { c: 'Block', m: 'loop' }, guardhit: { c: 'BlockHitReact', sp: 1.3 }, stun: { c: 'Stunned', m: 'loop' },
+  roll:     { c: 'RollForward_S', sp: 1.2 }, backstep: { c: 'DashBackward_S', sp: 1.1 }, sideU: { c: 'DashLeft_S', sp: 1.2 }, sideD: { c: 'DashRight_S', sp: 1.2 },
+  intro:    { c: ['Intro1', 'Intro2'] }, win: { c: ['Victory1', 'Victory2'] }, lose: { c: 'Stunned', m: 'loop' },
+} };
+STYLES.hvy = 'ヘビー級';
+// ---- ② 新しい敵のモーション ----
+{
+  const HV = { idle: { c: 'heavy:Idle', m: 'loop' }, walk: { c: 'heavy:WalkForward_S', m: 'loop', nat: 1.7 }, walkU: { c: 'heavy:WalkLeft_S', m: 'loop', nat: 1.8 }, walkD: { c: 'heavy:WalkRight_S', m: 'loop', nat: 1.8 },
+    run: { c: 'heavy:Run_S', m: 'loop', nat: 6.2, steps: 2 }, hurt: { c: 'heavy:LightHit', e: .5, sp: 1.4 }, knock: { c: 'heavy:Knockdown', e: .5 }, down: { c: 'heavy:Knockdown', s: .5, e: 1.6, sp: .8 },
+    dead: { c: 'heavy:Knockdown', s: 1.5, e: 1.6, sp: .1 }, getup: { c: 'heavy:Knockdown', s: 1.7, e: 2.33, sp: 1.5 }, guard: { c: 'heavy:Block', m: 'loop' }, guardhit: { c: 'heavy:BlockHitReact', sp: 1.3 },
+    stun: { c: 'heavy:Stunned', m: 'loop' }, grabbed: { c: 'heavy:Choke', m: 'loop' }, backstep: { c: 'heavy:DashBackward_S', sp: 1.1 } };
+  Object.assign(PROFILES, {
+    // 減量に失敗したルーキー: ジャブ→ストレート / 大きなアッパー / 跳んで地面を叩く（周りごと）/ 低く突っこむ
+    rookie: { set: 'male', ref: 'Idle', st: { ...PROFILES.male.st, ...HV,
+      eatk:   { seq: [{ c: 'heavy:Jab', sp: 1.1 }, { c: 'heavy:Punch', sp: 1.1 }], hit: [[.02, .13, { knock: 0, kb: .5, dmg: 4 }], [.55, .68]] },
+      eatk2:  { c: 'heavy:Uppercut', e: .95, sp: 1.1, hit: [[.34, .5]] },
+      eheavy: { c: 'heavy:SpecialAttack1', e: 1.3, sp: 1.0, hit: [[.48, .7]] },
+      eburst: { c: 'heavy:Sweep', e: .62, sp: 1.0, hit: [[.1, .26]] },
+      edash:  { c: 'heavy:MoveAttack1_S', e: 1.05, sp: 1.15, hit: [[.6, .86]] },
+    } },
+    // 5億年後から来た警備員: しゃがんで、ねらって 1 発 / 手りゅう弾（足もとに予告の輪 → 爆発）/ 近いと銃で殴る
+    soldier: { set: 'male', ref: 'Idle', st: { ...PROFILES.male.st,
+      idle:   { c: 'soldier:FS2_Standing_Aim_Idle', m: 'loop' },
+      walk:   { c: 'soldier:FS2_Run_Forward_Weapon', m: 'loop', nat: 3.0 }, walkU: { c: 'soldier:FS2_Run_Forward_Weapon', m: 'loop', nat: 3.0 }, walkD: { c: 'soldier:FS2_Run_Forward_Weapon', m: 'loop', nat: 3.0 },
+      run:    { c: 'soldier:FS2_Run_Forward_Weapon', m: 'loop', nat: 4.4 },
+      eatk:   { c: 'soldier:FS2_Mele_3_fists', e: 1.0, sp: 1.15, hit: [[.3, .44]] },
+      eatk2:  { c: 'soldier:FS2_Mele_1_with_weapon', e: .9, sp: 1.1, hit: [[.25, .38]] },
+      erange: { c: 'soldier:FS2_Idle_Crouch_Aim', e: 1.85, xz: 'lock', mv: { shot: null, aim: 1, burst: { at: 1.3, n: 1, gap: .2, spd: 19, dmg: 11, kb: 4, knock: 1, kind: 'bullet' } } },
+      ebolt:  { c: 'soldier:FS2_Grenade_Tos', s: .9, e: 2.3, sp: 1.25, xz: 'lock', mv: { bolt: { at: .58, n: 1, delay: 1.05, gap: 0, r: 1.15, dmg: 12, kind: 'gren' } } },
+      backstep: { c: 'soldier:FS2_Roll_Forward', e: 1.3, sp: 1.3 },
+    } },
+    // 定時まで寝る課長: ふだんは男性格闘パック。寝ているあいだだけ、居眠りの動き（下の「感情」で切りかえる）
+    sleeper: { set: 'male', ref: 'Idle', st: { ...PROFILES.male.st } },
+  });
+}
+Object.assign(ENEMIES, {
+  rookie:   { copy: 'power', name: '減量に失敗したルーキー', prof: 'rookie', hp: 72, spd: 1.55, pow: 1.25, reach: 1.25, color: 0xb04a2a, accent: 0xfff2a8, scale: 1.25, score: 320, heavyAtk: 1, dasher: 1, burst: 1, guard: .15, look: 'boxer' },
+  guardman: { copy: 'gun', name: '5億年後から来た警備員', prof: 'soldier', hp: 40, spd: 2.0, pow: 1.05, reach: 1.05, color: 0x2e3a4a, accent: 0x3affd0, scale: 1.0, score: 340, shooter: 1.6, range: 8, shotCd: 4.2, keepAway: 4.4, caster: 1, look: 'gun' },
+  sleeper:  { name: '定時まで寝る課長', prof: 'sleeper', hp: 60, spd: 1.8, pow: 1.1, reach: 1.1, color: 0x4a4f63, accent: 0xffffff, scale: 1.05, score: 260, sleeper: 1, guard: .1, look: 'tie' },
+});
+// ---- ③ 感情（Cartoon Motion）: どのモーション一式にも足す ----
+const EMOTES = {
+  eLaugh: { c: 'cartoon:Laugh_Strong', e: 2.2, xz: 'lock' }, eMad: { c: 'cartoon:Mad_Strong', xz: 'lock' }, eCheer: { c: 'cartoon:Cheer_Female', m: 'loop', xz: 'lock' },
+  eYawn: { c: 'cartoon:Yawning', xz: 'lock' }, eHead: { c: 'cartoon:Headache', xz: 'lock' }, eScared: { c: 'cartoon:Scared', m: 'loop', xz: 'lock' }, eSnooze: { c: 'cartoon:Snooze', m: 'loop', xz: 'lock' },
+};
+for (const P of Object.values(PROFILES)) if (P && P.st) Object.assign(P.st, EMOTES);
+Object.assign(LINES.genki, { cheer: ['いけいけー！ 応援してる！', 'その調子！ もっとやっちゃえ！', 'がんばれー！ パワー送るわよ！'], bored: ['……ふぁ〜あ。先、行かないの？', 'ねむくなってきた…', 'ねえ、進もうよ〜'], wake: ['あ、起こしちゃった…', '寝かせといたほうがよかったかも！'] });
+Object.assign(LINES.oshitoyaka, { cheer: ['がんばってください！ 応援しています！', 'その調子です！'], bored: ['……ふぁ。あ、失礼しました', '先へ進みましょうか？'], wake: ['起こしてしまいましたね…'] });
+Object.assign(LINES.cool, { cheer: ['いい流れだ。もっと押せ', '出力を上げろ。今がチャンスだ'], bored: ['……待機時間が長いな', '先へ進もう'], wake: ['寝た子を起こしたな'] });
+Object.assign(LINES.tonio, { cheer: ['がんばるでちゅ〜！', 'おうえんしてるでちゅ！'], bored: ['……ふぁ〜。ねむいでちゅ', 'はやくいくでちゅ'], wake: ['おこしちゃったでちゅ…'] });
+Object.assign(MOODTAG, { cheer: 'happy', bored: 'normal', wake: 'surprised' });
+
+// 感情を始める（dur 秒。next = そのあとに続ける感情）
+function emote(f, key, dur, next, lock = 0) {
+  if (!f || !f.alive || f.out) return;
+  f.state = 'emote'; f.emo = key; f.emoT = dur; f.emoNext = next || null; f.emoLock = lock; f.t = 0; f.move = null; f.vx = f.vz = 0;
+}
+function emoteTick(f, dt) {   // updateFighter の中から（state === 'emote' のとき）
+  f.vx *= Math.exp(-10 * dt); f.vz *= Math.exp(-10 * dt);
+  const c = f.ctrl, mine = f.isPlayer && f.t > (f.emoLock || 0) && (c.mx || c.mz || c.atk || c.jump || c.sp || c.rng || c.guard || c.dodge || c.duo || c.sup);
+  const foeNear = f.team !== 'enemy' && !f.isPlayer && fighters.some(e => e.team === 'enemy' && e.alive && e.state !== 'dead' && Math.abs(e.x - f.x) < 1.6 && Math.abs(e.z - f.z) < .8);
+  if (f.t >= f.emoT || mine || foeNear) {
+    const nx = f.emoNext; f.emoNext = null;
+    if (nx && !mine && !foeNear) emote(f, nx[0], nx[1], nx[2]); else { f.state = 'idle'; f.t = 0; f.emo = null; }
+  }
+}
+// 敵の感情（aiEnemy の最初に呼ぶ。true を返したら、そのフレームはほかの動きをしない）
+function aiUpg(e, dt) {
+  const sp = e.spec, A = e.ai, c = e.ctrl;
+  if (e.state === 'emote') {
+    c.mx = c.mz = 0;
+    if (e.emo === 'eSnooze') { A.zzT = (A.zzT || 0) - dt; if (A.zzT <= 0) { A.zzT = 1.6; textFx(e.x + .3, 2.0 * e.scl + .2, e.z, 'Zzz…', COL.blue, 1.1, 1.2); } }
+    return true;
+  }
+  if (sp.sleeper && !A.woke) {
+    if (A.enterT > 0) return false;   // まだ画面に入ってくるところ
+    if (!A.slept) { A.slept = 1; e.face = -e.face; emote(e, 'eYawn', 2.4, ['eSnooze', 1e9]); textFx(e.x, 2.1 * e.scl, e.z, 'ふぁ〜あ', COL.white, 1.3, 1.1); return true; }
+    if (e.state === 'idle' || e.state === 'walk') {   // 殴られて起き上がった → 怒って強くなる
+      A.woke = 1; e.spd *= 1.5; e.powMul = 1.5; e.inv = Math.max(e.inv, .6);
+      emote(e, 'eMad', 1.5); textFx(e.x, 2.2 * e.scl, e.z, '起こしたな!!', COL.red, 2.0, 1.2); sfx.alert(); shake(.12); say('wake', 2);
+      return true;
+    }
+  }
+  // 倒れた主人公を笑う（そのあいだは無防備）
+  if (!sp.boss && !sp.mid && !sp.sleeper || (sp.sleeper && A.woke)) {
+    A.laughCd = (A.laughCd == null ? rnd(2, 5) : A.laughCd) - dt;
+    if (A.laughCd <= 0) {
+      A.laughCd = 1.2;
+      const h = heroes().find(h => h.alive && !h.out && (h.state === 'down' || h.state === 'knock') && Math.abs(h.x - e.x) < 6.5 && Math.abs(h.x - e.x) > 1.4);
+      if (h && Math.random() < .45) { A.laughCd = rnd(8, 13); e.face = Math.sign(h.x - e.x) || e.face; emote(e, 'eLaugh', 1.7); textFx(e.x, 2.0 * e.scl + .1, e.z, pick(['プークスクス', 'ざまぁ!', 'ぷっ']), COL.pink, 1.2, 1.0); return true; }
+    }
+  }
+  return false;
+}
+// 超必殺のあと、まわりの敵がおびえる
+function scareNearby(x) {
+  for (const e of fighters) if (e.team === 'enemy' && e.alive && e.state !== 'dead' && !e.spec.boss && !e.spec.mid && (e.state === 'idle' || e.state === 'walk') && Math.abs(e.x - x) < 7) {
+    emote(e, 'eScared', rnd(.9, 1.4)); if (Math.random() < .5) textFx(e.x, 2.0 * e.scl, e.z, pick(['ひぃっ', 'こわっ', 'ムリムリ']), COL.blue, 1.1, .9);
+  }
+}
+// 毎フレーム（sim の中）: 応援でパワーアップ / ひまなときのあくび
+const UPG = { comboMark: 0, idleT: 0 };
+function upgTick(dt) {
+  if (G.mode !== 'coop' || G.phase !== 'play' || G.cine || G.finale) return;
+  const P1 = G.p1, P2 = G.p2;
+  for (const h of heroes()) if (h.buffT > 0) {
+    h.buffT -= dt;
+    if (Math.random() < dt * 22) glow.add(h.x + rnd(-.3, .3), rnd(.2, 1.7), h.z + rnd(-.15, .15), 0, rnd(.8, 2), 0, rnd(.4, .8), rnd(.08, .14), .02, 1.4, 1.0, .3, .9, -1, .5);
+    if (h.buffT <= 0 && h.isPlayer) textFx(h.x, 2.2, h.z, 'パワーアップ終了', COL.white, 1.0, .8);
+  }
+  // 相棒の応援: 1P の連続技が 15・30・45… に届いたとき
+  if (G.combo < 15) UPG.comboMark = 0;
+  const mark = Math.floor(G.combo / 15);
+  if (mark > UPG.comboMark && P2 && P2.alive && !P2.out && (P2.state === 'idle' || P2.state === 'walk') && P1 && !P1.out) {
+    UPG.comboMark = mark;
+    emote(P2, 'eCheer', 1.1); say('cheer', 3);
+    P1.buffT = 8; textFx(P1.x, 2.3, P1.z, '応援でパワーアップ!', COL.gold, 1.5, 1.2); sfx.lucky();
+    for (let i = 0; i < 24; i++) { const a = rnd(0, 6.283); glow.add(P1.x, 1, P1.z, Math.cos(a) * 3, rnd(1, 4), Math.sin(a) * 1.5, rnd(.5, .9), rnd(.1, .18), .02, 1.5, 1.1, .3, 1, 2, 1.5); }
+  }
+  // ひま: 敵がいない道で、1P が何もしないまま
+  const c = P1 && P1.ctrl, quiet = P1 && !P1.out && P1.state === 'idle' && c && !c.mx && !c.mz && !c.atk && !c.jump && !c.sp && !c.rng && !c.guard && !enemies().some(e => e.state !== 'dead');
+  UPG.idleT = quiet ? UPG.idleT + dt : 0;
+  if (UPG.idleT > 7 && P2 && P2.alive && !P2.out && P2.state === 'idle') { emote(P2, 'eYawn', 2.6); say('bored', 2); }
+  if (UPG.idleT > 11) { UPG.idleT = -30; emote(P1, 'eYawn', 3.2); }
+}
+// ---- 手りゅう弾（落雷の仕組みを使う。見た目と音だけちがう）----
+const _grenGeo = new T.SphereGeometry(.11, 10, 8), _grenMat = new T.MeshLambertMaterial({ color: 0x2f4a2a, emissive: 0x0a1408 });
+function grenFly(h, dt) {
+  if (!h.g) { h.g = new T.Mesh(_grenGeo, _grenMat); scene.add(h.g); h.lt = new T.Sprite(new T.SpriteMaterial({ map: radialTex, color: 0xff3020, transparent: true, depthWrite: false, blending: T.AdditiveBlending, fog: false })); h.lt.scale.setScalar(.35); h.g.add(h.lt); }
+  const fl = Math.max(.2, h.delay * .55), k = clamp(h.t / fl, 0, 1);
+  if (k < 1) h.g.position.set(h.sx + (h.x - h.sx) * k, 1.4 * (1 - k) + .11 + Math.sin(k * Math.PI) * 2.2, h.sz + (h.z - h.sz) * k);
+  else { h.g.position.set(h.x, .11, h.z); if (!h.landed) { h.landed = 1; sfx.land(); } }
+  h.g.rotation.x += dt * 12; h.lt.material.opacity = Math.floor(h.t * (h.t > h.delay * .75 ? 16 : 7)) % 2 ? 1 : .15;
+}
+function grenBoom(h) {
+  if (h.g) scene.remove(h.g);
+  sfx.boom(true); shake(.32); wFlash = Math.max(wFlash, .15);
+  flashFx(h.x, .6, h.z + .2, 4.2, COL.orange, .22, .8); ringFx(h.x, .05, h.z, .2, h.r * 2.6, .4, COL.orange, 'ground'); ringFx(h.x, .05, h.z, .1, h.r * 1.6, .3, COL.white, 'ground', 1, .7);
+  for (let n = 0; n < 30; n++) { const a = rnd(0, 6.283), v = rnd(2, 7); glow.add(h.x, .3, h.z, Math.cos(a) * v, rnd(1, 6), Math.sin(a) * v * .5, rnd(.3, .6), rnd(.12, .22), .02, 1.6, .8, .3, 1, 9, 1.5); }
+  for (let n = 0; n < 9; n++) smoke.add(h.x + rnd(-.4, .4), .3, h.z + rnd(-.2, .2), rnd(-1.2, 1.2), rnd(.6, 1.6), rnd(-.3, .3), rnd(.6, 1.1), .35, 1.2, .42, .4, .38, .6);
+  textFx(h.x, 1.4, h.z, 'ドカーン!', COL.orange, 2.0, .7);
+}
 function prepClone() {
   if (G.cloneBody && G.cloneOf !== (G.p1Char && G.p1Char.vrm)) G.cloneBody = null;   // キャラを替えたら、分身も作り直す
   if (G.cloneBody || G.cloneJob || !G.p1Char || !G.p1Char.vrm) return;
@@ -6606,6 +6794,7 @@ function sim(dt) {
   for (const e of es) { aiEnemy(e, dt, engaged); steerAI(e); }
   if (P2.alive && !P2.out && P2.ai) steerAI(P2);
   for (const f of fighters) if (f.alive && !f.out) updateFighter(f, dt);
+  upgTick(dt);
   separate();
   resolveHits();
   updateShots(dt);
