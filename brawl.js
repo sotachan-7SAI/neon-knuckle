@@ -1649,7 +1649,7 @@ const STAGES = [
     areas: [
       { lock: 8,  waves: [['grunt', 'sleeper'], ['grunt', 'speedy', 'boxer']] },
       { lock: 27, waves: [['grunt', 'poleman', 'boxer'], ['mid1', 'grunt']] },                          // 中ボス 1
-      { lock: 46, waves: [['heavy', 'gunner', 'grunt'], ['rookie', 'boxer', 'knife', 'gunner']] },
+      { lock: 46, waves: [['heavy', 'knight', 'grunt'], ['rookie', 'boxer', 'knife', 'gunner']] },
       { lock: 63, waves: [['knife', 'guardman', 'boxer'], ['mid2', 'speedy']] },                         // 中ボス 2
       { lock: 80, boss: 1, waves: [['boss', 'grunt']] },                                              // 大ボス
     ],
@@ -1663,7 +1663,7 @@ const STAGES = [
     areas: [
       { lock: 8,  waves: [['guard', 'sleeper', 'jet'], ['welder', 'guardman', 'guard']] },
       { lock: 27, waves: [['press', 'koji', 'spark'], ['esper', 'guard']] },                         // 中ボス 1（超能力者）
-      { lock: 46, waves: [['brute', 'jet', 'guardman'], ['witch', 'rocket', 'rookie', 'guard']] },
+      { lock: 46, waves: [['brute', 'jet', 'guardman'], ['witch', 'knight', 'rookie', 'guard']] },
       { lock: 63, waves: [['koji', 'welder', 'archer'], ['mid4', 'jet']] },                         // 中ボス 2
       { lock: 80, boss: 1, waves: [['boss2', 'guard']] },                                             // 大ボス
     ],
@@ -2204,6 +2204,7 @@ async function loadProfile(name, role) {
 function animKey(f) {
   const S = f.state;
   if (S === 'emote') return f.emo || 'idle';
+  if ((S === 'guard' || S === 'guardhit') && f.weapon && f.weapon.kind === 'knightset' && f.team !== 'enemy') return S === 'guard' ? 'kguard' : 'kguardhit';   // 盾の構え
   if (S === 'walk') {
     if (f.fast) return 'run';
     return Math.abs(f.vz) > Math.abs(f.vx) * 1.3 + .1 ? (f.vz < 0 ? 'walkU' : 'walkD') : 'walk';
@@ -2511,7 +2512,7 @@ function applyHit(a, b, m) {
   const ax = m.x != null ? m.x : a.x, hy = (b.y || 0) + 1.15 * Math.min(1.3, b.scl);
   // ガード: 正面からの軽い攻撃は受け止める（少しだけ削られる）。重い技は崩される
   if ((b.state === 'guard' || b.state === 'guardhit') && b.face === -dir) {
-    if (!m.heavy) {
+    if (!m.heavy || shieldUp(b)) {   // 盾なら、重い技も止まる
       addMeter(b, METER_GAIN.guard - dmg * METER_GAIN.hurt);
       b.hp = Math.max(1, b.hp - dmg * .15); b.state = 'guardhit'; b.t = 0; b.vx = dir * 2.4; b.flash = .05; b.move = null;
       hitStop = Math.max(hitStop, .035); fxGuard(b, dir, (ax + b.x) / 2 + dir * .1, hy, b.z); sfx.block();
@@ -3023,7 +3024,7 @@ function aiEnemy(e, dt, engaged) {
   const c = e.ctrl; c.atk = c.jump = c.sp = false; c.mx = c.mz = 0;
   const A = e.ai; A.think -= dt;
   A.guardT = (A.guardT || 0) - dt; c.guard = A.guardT > 0;
-  aiWpn(e, dt);
+  aiWpn(e, dt); aiKnight(e, dt);
   if (aiUpg(e, dt)) return;   // 感情（居眠り・笑う・おびえる）
   if (e.state === 'jump' && A.autoKick && e.t > .2) { c.atk = true; A.autoKick = false; }
   if (e.state !== 'idle' && e.state !== 'walk') return;
@@ -3228,7 +3229,12 @@ function weaponMesh(kind) {
   const g = new T.Group(), L = (c, e = 0) => new T.MeshLambertMaterial({ color: c, emissive: e });
   const cyl = (rb, rt, h, m, y) => { const me = new T.Mesh(new T.CylinderGeometry(rt, rb, h, 10), m); me.position.y = y; g.add(me); return me; };
   const box = (w, h, d, m, x, y, z) => { const me = new T.Mesh(new T.BoxGeometry(w, h, d), m); me.position.set(x, y, z); g.add(me); return me; };
-  if (kind === 'pole') {   // 物干し竿（靴下とタオルが干してある）
+  if (kind === 'knightset') {   // 段ボールの剣
+    box(.07, .78, .02, L(0xc89a5a), 0, .55, 0); box(.05, .1, .021, L(0xc89a5a), 0, .98, 0); box(.24, .04, .04, L(0x8a6a3a), 0, .15, 0); cyl(.024, .024, .2, L(0x5a3418), .04);
+    box(.012, .6, .022, L(0x9a7440), .02, .55, 0);   // 段ボールの波線（のつもり）
+  } else if (kind === 'potlid') {   // 鍋のふた（盾）: 円盤の面が +Y を向く
+    cyl(.26, .26, .025, L(0xb8bec8, 0x14161c), 0); cyl(.2, .2, .03, L(0xd8dce8, 0x1a1c22), .004); cyl(.05, .04, .06, L(0x2a2a2a), .04);
+  } else if (kind === 'pole') {   // 物干し竿（靴下とタオルが干してある）
     cyl(.022, .022, 1.95, L(0xc8d0dc, 0x14161c), .9); cyl(.026, .026, .05, L(0x4a5060), 1.88); cyl(.026, .026, .05, L(0x4a5060), -.08);
     box(.09, .17, .025, L(0xff6a9a), .07, 1.55, 0); box(.05, .06, .025, L(0xff6a9a), .1, 1.45, 0); box(.2, .14, .015, L(0x7fd0ff), -.05, 1.15, 0);
   } else if (kind === 'sledge') {   // 工事用ハンマー
@@ -3264,7 +3270,7 @@ function clearWeapons() { for (const w of gweapons) { scene.remove(w.g); scene.r
 function unhold(f) { const w = f.weapon; if (!w) return null; f.weapon = null; scene.remove(w.g); if (w.g2) scene.remove(w.g2); if (f.trails?.wp) f.trails.wp.prev = null; return w; }
 function holdWeapon(f, kind, uses) {
   unhold(f);
-  const w = { kind, uses: uses ?? WEAPONS[kind].uses, g: kind === 'knuckle' ? fistMesh() : weaponMesh(kind), g2: kind === 'knuckle' ? fistMesh() : null, th: .45, ph: 0 };
+  const w = { kind, uses: uses ?? WEAPONS[kind].uses, g: kind === 'knuckle' ? fistMesh() : weaponMesh(kind), g2: kind === 'knuckle' ? fistMesh() : kind === 'knightset' ? weaponMesh('potlid') : null, th: .45, ph: 0 };
   w.g.visible = false; scene.add(w.g); if (w.g2) { w.g2.visible = false; scene.add(w.g2); }
   f.weapon = w; return w;
 }
@@ -3419,6 +3425,7 @@ function weaponSync(f, dt, freeze) {
   w.g.quaternion.setFromUnitVectors(_wy, hp && hp.flip ? _va.copy(_wd).negate() : _wd); w.g.scale.setScalar(sc);
   if (hp) { _va.set(hp.p[0], hp.p[1], hp.p[2]).multiplyScalar(sc).applyQuaternion(w.g.quaternion); w.g.position.copy(_vb).sub(_va); } else w.g.position.copy(_vb);
   w.g.visible = true;
+  if (w.g2 && w.kind === 'knightset') shieldSync(f, w, body, sc);   // 鍋のふた（盾）
   // 振っている間は、先っぽに光の帯を引く
   const swing = !freeze && m && S === m.key && !m.air && m.a[0] < 5 && f.t > m.a[0] - .08 && f.t < m.a[1] + .06;
   if (swing) {
@@ -5712,7 +5719,7 @@ STAGES.push(
       { lock: 8,  waves: [['commuter', 'sleeper', 'rusher'], ['commuter', 'bento', 'ninja']] },
       { lock: 27, waves: [['drunk', 'shugaku', 'xbow'], ['mid5', 'commuter']] },                        // 中ボス 1（駆け込み乗車の常習）
       { lock: 46, waves: [['ninja', 'bento', 'commuter', 'rusher'], ['shugaku', 'sniper', 'archer', 'bento']] },
-      { lock: 63, waves: [['drunk', 'rusher', 'sniper'], ['mid6', 'ninja']] },                           // 中ボス 2（キセル忍者）
+      { lock: 63, waves: [['knight', 'rusher', 'sniper'], ['mid6', 'ninja']] },                           // 中ボス 2（キセル忍者）
       { lock: 80, boss: 1, waves: [['boss3', 'commuter']] },                                             // 大ボス（ダイヤの乱れ）
     ],
     armed: .26, eweapons: ['umbrella', 'umbrella', 'pipe'],
@@ -5723,7 +5730,7 @@ STAGES.push(
   { name: '5億年ランド', theme: 'park', intro: '閉園後の遊園地。踊っているやつは、だいたい敵！', clear: '5億年ランドを 閉園させた！', par: 480, minions: ['dancer', 'balloon', 'zombie'],
     areas: [
       { lock: 8,  waves: [['dancer', 'dancer', 'balloon'], ['clown', 'poleman', 'dancer']] },
-      { lock: 27, waves: [['mascot', 'fairy', 'balloon'], ['mid7', 'zombie']] },                         // 中ボス 1（着ぐるみの本体）
+      { lock: 27, waves: [['mascot', 'knight', 'balloon'], ['mid7', 'zombie']] },                         // 中ボス 1（着ぐるみの本体）
       { lock: 46, waves: [['zombie', 'koji', 'clown', 'archer'], ['mascot', 'dancer', 'balloon', 'clown']] },
       { lock: 63, waves: [['fairy', 'dancer', 'zombie', 'balloon'], ['mid8', 'dancer', 'dancer']] },     // 中ボス 2（絶叫担当）
       { lock: 80, boss: 1, waves: [['boss4', 'dancer', 'dancer']] },                                     // 大ボス（永遠のアイドル）
@@ -6847,6 +6854,71 @@ addEventListener('keydown', (e) => {
   requestAnimationFrame(poll);
 }
 if (Q.get('p3vrm')) G.p3Char = { name: Q.get('p3name') || 'テスト3', vrm: Q.get('p3vrm') };
+// =========================================================================================
+// 2026-10-14: Knight Warrior（剣と盾）のモーションで
+//   ① 新しい武器「段ボールの剣と鍋のふた」: 右手に剣、左手に盾。持っている間は、正面からのガードで重い技も止まる
+//      連続技は「騎士の型」: 斬り → 盾で殴る（ガードを崩す）→ 跳んで突き下ろす。ガードの構えも盾の構えになる
+//   ② 新しい敵「段ボールの騎士（円卓の13人目）」: 盾でよく守る。剣を掲げて「我に続け!」→ まわりの敵が少し強くなる
+//      倒すと「段ボールの剣と鍋のふた」を落とす
+// =========================================================================================
+DEFAULT_SETS.knight = './motions/brawl/knight';
+WEAPONS.knightset = { name: '段ボールの剣と鍋のふた', dmg: [10, 12, 19], reach: 1.5, uses: 16, thr: 12, len: .95, snd: 'wood', word: 'wood', col: 0xc89a5a, shield: 1 };
+WCLS.knightset = 'kn'; WCLS_NAME.kn = '騎士の型（盾でガード）';
+Object.assign(MOVES, {
+  wkn1: { dur: .5,  a: [.15, .28], dmg: 10, reach: 1.5, kb: 1.6, next: 'wkn2', step: .7, weapon: 1, wcls: 'kn', wi: 0 },   // 斬り
+  wkn2: { dur: .58, a: [.22, .36], dmg: 11, reach: 1.45, kb: 3.2, next: 'wkn3', step: 1.1, weapon: 1, wcls: 'kn', wi: 1, heavy: 1 },   // 盾で殴る（ガードを崩す）
+  wkn3: { dur: .78, a: [.24, .4], dmg: 18, reach: 1.7, kb: 6.5, knock: 1, step: 1.8, heavy: 1, around: 1, weapon: 1, wcls: 'kn', wi: 2 },   // 跳んで突き下ろす
+  erally: { dur: 1.2, a: [9, 9], dmg: 0, reach: 0 },   // 敵: 剣を掲げて味方を強くする
+});
+for (const k of ['wkn1', 'wkn2', 'wkn3', 'erally']) MOVES[k].key = k;
+Object.assign(POSE_ALIAS, { wkn1: 'jab2', wkn2: 'jab2', wkn3: 'fin', erally: 'win' });
+const KNIGHT_ST = {
+  wkn1:  { c: 'knight:Attack1', s: .1, e: .7, sp: 1.2, xz: 'lock', hit: [[.24, .4]] },
+  wkn2:  { c: 'knight:RangeAttack1', s: .25, e: .95, sp: 1.2, xz: 'lock', hit: [[.48, .64]] },
+  wkn3:  { c: 'knight:JumpAttack1', s: .05, e: 1.0, sp: 1.2, xz: 'lock', hit: [[.28, .46]] },
+  kguard: { c: 'knight:Block', m: 'loop' }, kguardhit: { c: 'knight:BlockHitReact', sp: 1.3 },
+};
+for (const P of Object.values(PROFILES)) if (P && P.st) Object.assign(P.st, KNIGHT_ST);
+PROFILES.knight = { set: 'male', ref: 'Idle', st: { ...PROFILES.male.st, ...EMOTES, ...WCLS_ST, ...KNIGHT_ST,
+  idle:   { c: 'knight:Idle', m: 'loop' },
+  walk:   { c: 'knight:WalkForward_S', m: 'loop', nat: 1.9 }, walkU: { c: 'knight:WalkLeft_S', m: 'loop', nat: 2.0 }, walkD: { c: 'knight:WalkRight_S', m: 'loop', nat: 2.0 },
+  run:    { c: 'knight:Run_S', m: 'loop', nat: 6.2, steps: 2 },
+  eatk:   { c: 'knight:Attack1', s: .05, e: .8, sp: 1.0, xz: 'lock', hit: [[.22, .38]] },
+  eatk2:  { c: 'knight:RangeAttack1', s: .1, e: 1.1, sp: 1.0, xz: 'lock', hit: [[.48, .64]] },          // 盾で殴る
+  edash:  { c: 'knight:MoveAttack1', e: 1.0, sp: 1.0, xz: 'lock', hit: [[.5, .66]] },
+  eheavy: { c: 'knight:JumpAttack1', e: 1.1, sp: .95, xz: 'lock', hit: [[.26, .44]] },                   // 跳んで突き下ろす
+  erally: { c: 'knight:SpecialAttack1', sp: 1.0, xz: 'lock' },
+  guard:  { c: 'knight:Block', m: 'loop' }, guardhit: { c: 'knight:BlockHitReact', sp: 1.3 },
+  hurt:   { c: 'knight:LightHit', e: .55, sp: 1.4 },
+} };
+ENEMIES.knight = { copy: 'blade', name: '段ボールの騎士（円卓の13人目）', prof: 'knight', wpn: 'knightset', hp: 72, spd: 1.75, pow: 1.15, reach: 1.4, color: 0xb08850, accent: 0xd8dce8, scale: 1.05, score: 360, guard: .55, shield: 1, rally: 1, dasher: 1, heavyAtk: 1 };
+// 盾を持っているか（正面のガードで、重い技も止まる。敵の騎士は 6 割）
+function shieldUp(b) { return !!((b.weapon && WEAPONS[b.weapon.kind].shield && b.team !== 'enemy') || (b.spec && b.spec.shield && Math.random() < .6)); }
+// 盾の位置: 剣と反対の手。体の正面へ向ける
+function shieldSync(f, w, body, sc) {
+  const mir = !!body.cur?.mir, h = mir ? 'right' : 'left';
+  if (!body.limbPos(h + 'LowerArm', h + 'Hand', _va, _vb)) { w.g2.visible = false; return; }
+  const gd = f.state === 'guard' || f.state === 'guardhit';
+  w.g2.position.copy(_vb).addScaledVector(_vc.subVectors(_vb, _va).normalize(), .04 * sc);
+  _wd.set(f.face * (gd ? 1 : .75), 0, gd ? .15 : .55).normalize();
+  w.g2.quaternion.setFromUnitVectors(_wy, _wd); w.g2.scale.setScalar(sc); w.g2.visible = true;
+}
+// 敵の騎士: 剣を掲げて「我に続け!」
+function aiKnight(e, dt) {
+  const A = e.ai, sp = e.spec;
+  if (e.buffT > 0) { e.buffT -= dt; if (Math.random() < dt * 12) glow.add(e.x + rnd(-.3, .3), rnd(.3, 1.8) * e.scl, e.z, 0, rnd(.6, 1.6), 0, rnd(.3, .6), rnd(.07, .12), .02, 1.3, .3, .25, .9, -1, .5); }
+  if (!sp.rally) return;
+  if (A.rallyAt > 0) { A.rallyAt -= dt; if (A.rallyAt <= 0 && e.state === 'erally') {
+    for (const o of fighters) if (o !== e && o.team === 'enemy' && o.alive && o.state !== 'dead' && Math.abs(o.x - e.x) < 7) { o.buffT = 6; textFx(o.x, 2.0 * o.scl, o.z, 'オー!', COL.orange, 1.0, .7); }
+    ringFx(e.x, .05, e.z, .3, 4, .4, COL.red, 'ground'); } }
+  A.rallyCd = (A.rallyCd == null ? rnd(3, 6) : A.rallyCd) - dt;
+  if (A.rallyCd > 0 || e.state !== 'idle' || A.enterT > 0) return;
+  const mates = fighters.filter(o => o !== e && o.team === 'enemy' && o.alive && o.state !== 'dead' && Math.abs(o.x - e.x) < 7);
+  if (!mates.length) { A.rallyCd = 2; return; }
+  A.rallyCd = rnd(9, 13); startMove(e, 'erally');
+  textFx(e.x, 2.3 * e.scl, e.z, '我に続け!', COL.red, 1.6, 1.1); sfx.alert();
+  A.rallyAt = .55;
+}
 function prepClone() {
   if (G.cloneBody && G.cloneOf !== (G.p1Char && G.p1Char.vrm)) G.cloneBody = null;   // キャラを替えたら、分身も作り直す
   if (G.cloneBody || G.cloneJob || !G.p1Char || !G.p1Char.vrm) return;
